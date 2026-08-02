@@ -214,6 +214,26 @@ export class Room<T = unknown, P = unknown, M = unknown> {
     this.timer = null;
   }
 
+  /** After a log gap: pull current truth straight from contract storage
+   *  and surface it through the normal state channel. */
+  private async refreshState() {
+    try {
+      const [state, seq] = await Promise.all([
+        this.getState(),
+        this.sock.client.readContract({
+          address: this.sock.contract,
+          abi: ABI,
+          functionName: "stateSeq",
+          args: [this.id],
+        }) as Promise<bigint>,
+      ]);
+      if (state !== null)
+        for (const cb of this.stateCbs) cb({ player: "", seq: Number(seq), state });
+    } catch {
+      /* next gap or event will retry */
+    }
+  }
+
   private ensurePolling() {
     if (this.timer) return;
     this.timer = setInterval(() => void this.poll(), POLL_MS);
@@ -230,6 +250,14 @@ export class Room<T = unknown, P = unknown, M = unknown> {
       const head = await this.sock.client.getBlockNumber({ cacheTime: 0 });
       if (this.fromBlock === null) this.fromBlock = head;
       if (head < this.fromBlock) return;
+      // The RPC caps eth_getLogs at a 100-block range, and a backgrounded
+      // tab (throttled timers) can fall much further behind. Skip ahead in
+      // one capped hop — and because that skips ground, re-read the shared
+      // state from storage so puzzles never stay stale.
+      if (head - this.fromBlock > 90n) {
+        this.fromBlock = head - 90n;
+        if (this.stateCbs.length) void this.refreshState();
+      }
       const logs = await this.sock.client.getLogs({
         address: this.sock.contract,
         fromBlock: this.fromBlock,
