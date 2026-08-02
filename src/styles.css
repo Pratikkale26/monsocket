@@ -1602,9 +1602,9 @@ button.cta:not(:disabled):active {
 }
 
 .landing-app > header {
-  position: absolute;
+  position: fixed;
   inset: 28px clamp(18px, 4vw, 56px) auto clamp(18px, 4vw, 56px);
-  z-index: 20;
+  z-index: 60;
   display: flex;
   align-items: center;
   pointer-events: none;
@@ -1621,7 +1621,9 @@ button.cta:not(:disabled):active {
   border-radius: 999px;
   background: rgba(5, 3, 2, 0.34);
   backdrop-filter: blur(18px) saturate(150%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 50px rgba(0, 0, 0, 0.28);
   font-family: "Space Grotesk", Inter, system-ui, sans-serif;
   font-size: 15px;
   font-weight: 600;
@@ -1778,10 +1780,10 @@ button.cta:not(:disabled):active {
 }
 
 .landing-nav {
-  position: absolute;
+  position: fixed;
   top: 28px;
   right: clamp(18px, 4vw, 56px);
-  z-index: 21;
+  z-index: 61;
   display: flex;
   gap: 6px;
   align-items: center;
@@ -1790,7 +1792,9 @@ button.cta:not(:disabled):active {
   border-radius: 999px;
   background: rgba(5, 3, 2, 0.34);
   backdrop-filter: blur(18px) saturate(150%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 50px rgba(0, 0, 0, 0.28);
   font-size: 12px;
   line-height: 1;
 }
@@ -2388,6 +2392,7 @@ button.cta:not(:disabled):active {
   --docs-line: rgba(246, 243, 239, 0.12);
   --docs-orange: #f16001;
   min-height: 100dvh;
+  padding-top: 94px;
   background: var(--docs-bg);
   color: var(--docs-ink);
   font-family: "Space Grotesk", Inter, system-ui, sans-serif;
@@ -2395,17 +2400,14 @@ button.cta:not(:disabled):active {
 }
 
 .docs-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  position: fixed;
+  inset: 28px clamp(18px, 4vw, 56px) auto clamp(18px, 4vw, 56px);
+  z-index: 60;
   display: flex;
   justify-content: space-between;
   gap: 18px;
   align-items: center;
-  min-height: 94px;
-  padding: 0 clamp(18px, 4vw, 56px);
-  background: linear-gradient(180deg, rgba(8, 7, 6, 0.96), rgba(8, 7, 6, 0.74));
-  backdrop-filter: blur(18px) saturate(150%);
+  pointer-events: none;
 }
 
 .docs-logo {
@@ -2417,11 +2419,15 @@ button.cta:not(:disabled):active {
   border: 1px solid rgba(249, 249, 249, 0.12);
   border-radius: 999px;
   background: rgba(5, 3, 2, 0.34);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 50px rgba(0, 0, 0, 0.28);
   color: var(--docs-ink);
   font-size: 15px;
   font-weight: 600;
   text-decoration: none;
+  pointer-events: auto;
 }
 
 .docs-logo::after {
@@ -2441,9 +2447,13 @@ button.cta:not(:disabled):active {
   border: 1px solid rgba(249, 249, 249, 0.12);
   border-radius: 999px;
   background: rgba(5, 3, 2, 0.34);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 50px rgba(0, 0, 0, 0.28);
   font-size: 12px;
   line-height: 1;
+  pointer-events: auto;
 }
 
 .docs-topbar nav a,
@@ -2782,7 +2792,7 @@ button.cta:not(:disabled):active {
   }
 
   .landing-nav {
-    position: absolute;
+    position: fixed;
     top: 66px;
     right: max(18px, calc(100vw - 372px));
     left: auto;
@@ -3008,11 +3018,16 @@ button.cta:not(:disabled):active {
   }
 
   .docs-topbar {
+    inset: 20px 18px auto 18px;
     min-height: auto;
     align-items: flex-start;
     flex-direction: column;
     gap: 10px;
-    padding: 18px;
+    padding: 0;
+  }
+
+  .docs-page {
+    padding-top: 126px;
   }
 
   .docs-topbar nav {
@@ -3037,8 +3052,8 @@ button.cta:not(:disabled):active {
   }
 
   .docs-sidebar {
-    top: 114px;
-    height: calc(100dvh - 114px);
+    top: 126px;
+    height: calc(100dvh - 126px);
     margin: 0;
     padding: 18px 10px 24px 0;
     background: transparent;
