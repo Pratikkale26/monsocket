@@ -201,9 +201,9 @@ const CHAMBER_COPY = [
 ] as const;
 
 const SOCKET_POINTS = [
-  ["Play together", "partner movement streams live through Monad"],
-  ["Invite instantly", "one room link for players, one free link for watchers"],
-  ["Prove the run", "chat, solves, and progress are written onchain"],
+  ["Presence", "live player movement"],
+  ["Rooms", "one link to play, one to watch"],
+  ["State", "solves written onchain"],
 ] as const;
 
 export default function App() {
@@ -1320,10 +1320,9 @@ export default function App() {
           <section className="landing-section monsocket-section" aria-labelledby="network-title">
             <div className="section-copy">
               <p className="section-kicker">monsocket</p>
-              <h3 id="network-title">Realtime rooms for Monad games.</h3>
+              <h3 id="network-title">The SDK behind The Vault.</h3>
               <p>
-                Monsocket is the engine under The Vault: it turns Monad
-                transactions into a playable co-op room.
+                Rooms, presence, events, and shared state for realtime Monad apps.
               </p>
             </div>
             <div className="socket-panel" aria-label="Why monsocket matters for players">
