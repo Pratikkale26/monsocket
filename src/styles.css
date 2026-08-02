@@ -2846,7 +2846,7 @@ button.cta:not(:disabled):active {
     top: 66px;
     right: max(18px, calc(100vw - 372px));
     left: auto;
-    z-index: 30;
+    z-index: 62;
     width: min(210px, calc(100vw - 36px));
     max-width: calc(100vw - 36px);
     display: grid;
@@ -2881,7 +2881,7 @@ button.cta:not(:disabled):active {
     position: fixed;
     top: 20px;
     right: max(18px, calc(100vw - 372px));
-    z-index: 40;
+    z-index: 63;
     display: inline-flex;
     width: 46px;
     height: 40px;

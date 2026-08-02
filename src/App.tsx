@@ -1135,6 +1135,32 @@ export default function App() {
           </div>
         )}
       </header>
+      {phase === "funding" && (
+        <>
+          <button
+            className="mobile-menu-button"
+            type="button"
+            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <span />
+            <span />
+          </button>
+          <nav className={`landing-nav${mobileNavOpen ? " open" : ""}`} aria-label="Landing page">
+            <a href={docsHref}>
+              Docs
+            </a>
+            <a href="https://github.com/Pratikkale26/monsocket" target="_blank" rel="noreferrer">
+              GitHub
+            </a>
+            <a href={EXPLORER} target="_blank" rel="noreferrer">
+              Contract
+            </a>
+            <span>Monad testnet</span>
+          </nav>
+        </>
+      )}
 
       {phase === "funding" && (
         <main className="title landing-page">
@@ -1145,28 +1171,6 @@ export default function App() {
               <span className="silhouette s3" />
               <span className="silhouette s4" />
             </div>
-            <button
-              className="mobile-menu-button"
-              type="button"
-              aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-              aria-expanded={mobileNavOpen}
-              onClick={() => setMobileNavOpen((open) => !open)}
-            >
-              <span />
-              <span />
-            </button>
-            <nav className={`landing-nav${mobileNavOpen ? " open" : ""}`} aria-label="Landing page">
-              <a href={docsHref}>
-                Docs
-              </a>
-              <a href="https://github.com/Pratikkale26/monsocket" target="_blank" rel="noreferrer">
-                GitHub
-              </a>
-              <a href={EXPLORER} target="_blank" rel="noreferrer">
-                Contract
-              </a>
-              <span>Monad testnet</span>
-            </nav>
 
             <div className="hero-shell">
               <div className="hero-copy">
