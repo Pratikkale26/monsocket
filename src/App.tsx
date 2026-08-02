@@ -98,6 +98,12 @@ export default function App() {
   const [showHint, setShowHint] = useState(true);
   const [mute, setMute] = useState(isMuted());
   const [copied, setCopied] = useState(false);
+  const [levelCard, setLevelCard] = useState<{
+    num: number;
+    name: string;
+    win: number;
+    until: number;
+  } | null>(null);
 
   const roomRef = useRef<Vault | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -114,6 +120,18 @@ export default function App() {
   const valveRef = useRef({ half: 0, at: 0 }); // valves mech: pair 1 latched?
   const chargeRef = useRef({ start: 0, lastBoth: 0 }); // charge mech: hold timer
   const sndPrev = useRef({ doors: 0, cleared: false, out: false, keyA: 0, keyB: 0 });
+  const feed = useRef<{ id: number; ico: string; text: string }[]>([]);
+  const feedId = useRef(0);
+  const presenceTx = useRef(0);
+  const shakeRef = useRef(0); // screen shake until-timestamp
+  const parts = useRef<
+    { x: number; y: number; vx: number; vy: number; life: number; color: string }[]
+  >([]);
+
+  /** The live tx feed beside the canvas — the chain, visible. */
+  const pushFeed = (ico: string, text: string) => {
+    feed.current = [{ id: feedId.current++, ico, text }, ...feed.current].slice(0, 30);
+  };
 
   const selfKey = sock.address.toLowerCase();
   const roleRef = useRef(0);
@@ -144,15 +162,35 @@ export default function App() {
     const nowCleared = solved && !isFinal(v);
     setOut(nowOut);
     setCleared(nowCleared);
-    // sound triggers: fire once per state transition, whoever caused it
+    // sound + feed triggers: fire once per state transition, whoever caused it
     const p = sndPrev.current;
-    if (v.doors & DOOR1 && !(p.doors & DOOR1)) sfx.door();
-    if (v.doors & LOCK1 && !(p.doors & LOCK1)) sfx.door();
-    if (v.doors & LOCK2 && !(p.doors & LOCK2)) sfx.door();
-    if (v.doors & LATCH && !(p.doors & LATCH)) sfx.latch();
+    if (v.doors & DOOR1 && !(p.doors & DOOR1)) {
+      sfx.door();
+      pushFeed("🚪", "stage 1 solved — door 1 unlocked · setState tx");
+    }
+    if (v.doors & LOCK1 && !(p.doors & LOCK1)) {
+      sfx.door();
+      pushFeed("🔓", "lock 1 released · setState tx");
+    }
+    if (v.doors & LOCK2 && !(p.doors & LOCK2)) {
+      sfx.door();
+      pushFeed("🔓", "lock 2 released · setState tx");
+    }
+    if (v.doors & LATCH && !(p.doors & LATCH)) {
+      sfx.latch();
+      pushFeed("⚙️", "stage 3 latched — door 3 open · setState tx");
+    }
+    if (v.keyA && v.keyA !== p.keyA) pushFeed("🗝️", "key A turned · timestamp onchain");
+    if (v.keyB && v.keyB !== p.keyB) pushFeed("🗝️", "key B turned · timestamp onchain");
     if ((v.keyA && v.keyA !== p.keyA) || (v.keyB && v.keyB !== p.keyB)) sfx.turn();
-    if (nowCleared && !p.cleared) sfx.clear();
-    if (nowOut && !p.out) sfx.escape();
+    if (nowCleared && !p.cleared) {
+      sfx.clear();
+      pushFeed("✅", `level ${v.level + 1} cleared`);
+    }
+    if (nowOut && !p.out) {
+      sfx.escape();
+      pushFeed("🏆", "ESCAPED — the whole run is verifiable onchain");
+    }
     sndPrev.current = {
       doors: v.doors,
       cleared: nowCleared,
@@ -247,14 +285,23 @@ export default function App() {
           text: data.text,
           until: Date.now() + 5_000,
         });
+        pushFeed("💬", `${player.slice(0, 6)}…: ${data.text.slice(0, 40)}`);
       });
       room.onPresence(({ player }) => {
+        presenceTx.current += 1;
         if (player === selfKey && sentAt.current) {
           setEcho(Date.now() - sentAt.current);
         }
       });
       smoothPresence(room, (players) => {
         remotes.current = players;
+      });
+      const cur = levelOf(vault.current);
+      setLevelCard({
+        num: vault.current.level + 1,
+        name: cur.name,
+        win: cur.keyWindowMs,
+        until: Date.now() + 2_400,
       });
       setPhase("live");
     } catch (e) {
@@ -278,6 +325,26 @@ export default function App() {
     let lastTile = "";
     let raf = 0;
     let last = performance.now();
+    // fx trackers: fire particles once per observed transition
+    let fxDoors = vault.current.doors;
+    let fxKeyA = vault.current.keyA;
+    let fxKeyB = vault.current.keyB;
+    let fxFrozen = false;
+
+    const spawnBurst = (x: number, y: number, color: string, n: number) => {
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 40 + Math.random() * 90;
+        parts.current.push({
+          x,
+          y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp - 30,
+          life: 0.6 + Math.random() * 0.3,
+          color,
+        });
+      }
+    };
 
     const typing = () => document.activeElement === chatInputRef.current;
     const room = () => roomRef.current;
@@ -316,6 +383,7 @@ export default function App() {
         writeState({ doors: vault.current.doors | (myRole() === 0 ? LOCK2 : LOCK1) });
       } else {
         sfx.wrong();
+        shakeRef.current = Date.now() + 150;
         chats.current.set(selfKey, { text: "✗ wrong code", until: Date.now() + 1_500 });
       }
       buf.current = "";
@@ -455,6 +523,11 @@ export default function App() {
         carryRef.current = false;
         valveRef.current = { half: 0, at: 0 };
         chargeRef.current = { start: 0, lastBoth: 0 };
+        fxDoors = 0;
+        fxKeyA = 0;
+        fxKeyB = 0;
+        fxFrozen = false;
+        setLevelCard({ num: v.level + 1, name: L.name, win: L.keyWindowMs, until: Date.now() + 2_400 });
         broadcast(true);
       }
 
@@ -471,6 +544,8 @@ export default function App() {
       // your partner is freezing it from the vent plate — or it's purged).
       const ventSafe = (v.doors & LATCH) !== 0 || pTile === "V";
       if (!watchMode && !solvedKeys(v) && deadlyTile(myTile, ventSafe)) {
+        spawnBurst(me.x, me.y, "#f87171", 14);
+        shakeRef.current = Date.now() + 250;
         me.x = L.spawn.x;
         me.y = L.spawn.y;
         myTile = tileUnder(L, me.x, me.y);
@@ -571,6 +646,38 @@ export default function App() {
       // A half-typed code shouldn't linger: walking away clears the keypad.
       if (mech.locks === "codes" && buf.current && !near(me.x, me.y, myPad().x, myPad().y, 1.6))
         buf.current = "";
+
+      // fx: sparks on doors opening, key turns, level clears
+      if (v.doors !== fxDoors) {
+        const gained = v.doors & ~fxDoors;
+        fxDoors = v.doors;
+        if (gained) {
+          if (!watchMode) spawnBurst(me.x, me.y, "#a595fa", 10);
+          const p2 = partner();
+          if (p2) spawnBurst(p2.data.x, p2.data.y, "#a595fa", 10);
+        }
+      }
+      if (v.keyA && v.keyA !== fxKeyA) {
+        fxKeyA = v.keyA;
+        spawnBurst(L.pos.A.x, L.pos.A.y, "#facc15", 12);
+      }
+      if (v.keyB && v.keyB !== fxKeyB) {
+        fxKeyB = v.keyB;
+        spawnBurst(L.pos.B.x, L.pos.B.y, "#facc15", 12);
+      }
+      if (frozen && !fxFrozen) {
+        fxFrozen = true;
+        for (const c of ["#4ade80", "#a595fa", "#facc15"])
+          spawnBurst(WIDTH / 2, HEIGHT / 2, c, 16);
+      }
+
+      // screen shake: hazards and wrong codes rattle the vault
+      const shakeLeft = shakeRef.current - Date.now();
+      ctx.save();
+      if (shakeLeft > 0) {
+        const m = 4 * (shakeLeft / 250);
+        ctx.translate((Math.random() - 0.5) * 2 * m, (Math.random() - 0.5) * 2 * m);
+      }
 
       const codes = codesFor(room()!.id, v.level);
       drawVault(ctx, L, {
@@ -673,7 +780,26 @@ export default function App() {
           { self: true, chat: chats.current.get(selfKey), carry: carryRef.current },
         );
 
-      // hazard hit: red flash fading out
+      // particles
+      const ps = parts.current;
+      for (let i = ps.length - 1; i >= 0; i--) {
+        const q = ps[i];
+        q.life -= dt;
+        if (q.life <= 0) {
+          ps.splice(i, 1);
+          continue;
+        }
+        q.x += q.vx * dt;
+        q.y += q.vy * dt;
+        q.vy += 160 * dt;
+        ctx.globalAlpha = Math.max(0, Math.min(1, q.life * 1.6));
+        ctx.fillStyle = q.color;
+        ctx.fillRect(q.x - 1.5, q.y - 1.5, 3, 3);
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+
+      // hazard hit: red flash fading out (drawn unshaken, over everything)
       if (flash.current && flash.current.until > Date.now()) {
         const a = ((flash.current.until - Date.now()) / 350) * 0.35;
         ctx.fillStyle = `rgba(248,113,113,${a.toFixed(3)})`;
@@ -914,7 +1040,7 @@ export default function App() {
 
       {phase === "connecting" && (
         <div className="panel">
-          <span className="dot wait" />{" "}
+          <span className="spinner" />
           {watchMode ? "tuning into" : joinTarget ? "entering" : "creating"} the vault
           on Monad testnet…
         </div>
@@ -922,8 +1048,23 @@ export default function App() {
 
       {phase === "error" && <div className="panel error">{error}</div>}
 
-      <div className="stage" style={{ display: phase === "live" ? "block" : "none" }}>
+      <div className="game-wrap" style={{ display: phase === "live" ? "grid" : "none" }}>
+        <div>
+        <div className="stage">
         <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} />
+        {phase === "live" && watchMode && (
+          <>
+            <div className="scanlines" />
+            <span className="live-chip">● LIVE FEED</span>
+          </>
+        )}
+        {phase === "live" && levelCard && Date.now() < levelCard.until && (
+          <div className="lvlcard">
+            <span>CHAMBER 0{levelCard.num}</span>
+            <b>{levelCard.name.toUpperCase()}</b>
+            <i>key window {(levelCard.win / 1000).toFixed(1)}s</i>
+          </div>
+        )}
         {phase === "live" && !watchMode && online < 2 && level === 0 && !(doors & DOOR1) && !out && (
           <div className="hint">
             <b>waiting for your partner</b>
@@ -991,7 +1132,12 @@ export default function App() {
             </button>
           </div>
         )}
-        {objective && !out && !cleared && <div className="objective">{objective}</div>}
+        </div>
+        {objective && !out && !cleared && (
+          <div className="objective" key={objective}>
+            {objective}
+          </div>
+        )}
         <div className="steps">
           {steps.map(([label, done]) => (
             <span key={label} className={done ? "step done" : "step"}>
@@ -1004,12 +1150,47 @@ export default function App() {
             <input
               ref={chatInputRef}
               value={chatDraft}
+              maxLength={140}
               placeholder="Enter to chat — relay those codes · WASD move · E use"
               onChange={(e) => setChatDraft(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && chatInputRef.current?.blur()}
             />
           </form>
         )}
+        </div>
+        <aside className="feed">
+          <div className="feed-head">
+            <span className="dot live" /> monad tx feed
+          </div>
+          <div className="feed-stream">presence stream · {presenceTx.current} txs</div>
+          {feed.current.length === 0 ? (
+            <div className="feed-empty">
+              every chat line and puzzle write lands here the moment it hits the
+              chain — movement streams above
+            </div>
+          ) : (
+            feed.current.slice(0, 8).map((f) => (
+              <div key={f.id} className="feed-item">
+                <span className="feed-ico">{f.ico}</span>
+                <span>{f.text}</span>
+              </div>
+            ))
+          )}
+        </aside>
+      </div>
+
+      <div className="footer">
+        <span>built on monsocket — Socket.io for Monad</span>
+        <span className="sep">·</span>
+        <a href="https://github.com/Pratikkale26/monsocket" target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+        <span className="sep">·</span>
+        <a href={EXPLORER} target="_blank" rel="noreferrer">
+          contract
+        </a>
+        <span className="sep">·</span>
+        <span>Monad testnet</span>
       </div>
     </div>
   );

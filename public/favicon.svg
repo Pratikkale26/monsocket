@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- monsocket mark: a hub broadcasting to peers — Monad purple -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#12101c"/>
+  <g stroke="#836EF9" fill="none" stroke-linecap="round">
+    <g stroke-width="3">
+      <path d="M25 14 H20 Q14 14 14 20 V25"/>
+      <path d="M39 14 H44 Q50 14 50 20 V25"/>
+      <path d="M14 39 V44 Q14 50 20 50 H25"/>
+      <path d="M50 39 V44 Q50 50 44 50 H39"/>
+    </g>
+    <g stroke-width="3">
+      <path d="M32 26 V16.5"/>
+      <path d="M32 38 V47.5"/>
+      <path d="M38 32 H46.5"/>
+      <path d="M26 32 H19.5"/>
+      <path d="M36.3 27.7 L41.5 22.5"/>
+      <path d="M27.7 27.7 L22.5 22.5"/>
+      <path d="M36.3 36.3 L41.5 41.5"/>
+      <path d="M27.7 36.3 L22.5 41.5"/>
+    </g>
+    <rect x="9.75" y="27.75" width="8.5" height="8.5" stroke-width="2.6"/>
+  </g>
+  <g fill="#836EF9">
+    <circle cx="32" cy="32" r="5.8"/>
+    <circle cx="32" cy="12.75" r="4.2"/>
+    <circle cx="32" cy="51.25" r="4.2"/>
+    <circle cx="50.5" cy="32" r="4.2"/>
+    <circle cx="43.6" cy="20.4" r="2.6"/>
+    <circle cx="20.4" cy="20.4" r="2.6"/>
+    <circle cx="43.6" cy="43.6" r="2.6"/>
+    <circle cx="20.4" cy="43.6" r="2.6"/>
+  </g>
+</svg>
