@@ -27,13 +27,16 @@ export default function DocsPage() {
           monsocket
         </a>
         <nav aria-label="Documentation top navigation">
-          <a href="/">Game</a>
+          <a href="/docs" aria-current="page">
+            Docs
+          </a>
           <a href={GITHUB_URL} target="_blank" rel="noreferrer">
             GitHub
           </a>
           <a href={EXPLORER_URL} target="_blank" rel="noreferrer">
             Contract
           </a>
+          <span>Monad testnet</span>
         </nav>
       </header>
 
