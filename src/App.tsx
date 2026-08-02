@@ -97,6 +97,7 @@ export default function App() {
   const [chatDraft, setChatDraft] = useState("");
   const [showHint, setShowHint] = useState(true);
   const [mute, setMute] = useState(isMuted());
+  const [copied, setCopied] = useState(false);
 
   const roomRef = useRef<Vault | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -846,14 +847,23 @@ export default function App() {
                   <div
                     className={`wallet-chip${balance !== null && balance >= 1 ? " ok" : ""}`}
                     title="click to copy the full address"
-                    onClick={() => navigator.clipboard.writeText(sock.address)}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(sock.address);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1_500);
+                    }}
                   >
                     <span className="dot" />
                     <code>
-                      {sock.address.slice(0, 6)}…{sock.address.slice(-4)}
+                      {copied
+                        ? "address copied ✓"
+                        : `${sock.address.slice(0, 6)}…${sock.address.slice(-4)}`}
                     </code>
                     <span className="chip-bal">
                       {balance === null ? "…" : `${balance.toFixed(2)} MON`}
+                    </span>
+                    <span className={`copy-ic${copied ? " done" : ""}`}>
+                      {copied ? "✓" : "⧉ copy"}
                     </span>
                   </div>
                 </div>

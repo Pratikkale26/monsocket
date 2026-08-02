@@ -652,3 +652,14 @@ button.cta:not(:disabled):hover {
     grid-template-columns: 1fr;
   }
 }
+
+.wallet-chip .copy-ic {
+  color: #9aa0b4;
+  font-size: 11px;
+  border-left: 1px solid #343850;
+  padding-left: 8px;
+}
+
+.wallet-chip .copy-ic.done {
+  color: #4ade80;
+}
