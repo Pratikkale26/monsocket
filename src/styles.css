@@ -2504,10 +2504,22 @@ button.cta:not(:disabled):active {
   color: var(--docs-muted);
   font-size: 13px;
   text-decoration: none;
+  transition:
+    background 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
 }
 
-.docs-sidebar a:hover {
+.docs-sidebar a:hover,
+.docs-sidebar a[aria-current="true"] {
   background: rgba(246, 243, 239, 0.06);
+  color: var(--docs-ink);
+}
+
+.docs-sidebar a[aria-current="true"] {
+  background:
+    radial-gradient(circle at left center, rgba(241, 96, 1, 0.2), transparent 68%),
+    rgba(246, 243, 239, 0.08);
   color: var(--docs-ink);
 }
 

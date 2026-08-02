@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { CONTRACT, RPC_URL } from "./lib/deployment";
 
 const GITHUB_URL = "https://github.com/Pratikkale26/monsocket";
@@ -19,7 +20,48 @@ const vaultRows = [
   ["Chamber 03", "partner-visible glass, cross levers, pulse wall, charge pads"],
 ] as const;
 
+const docSections = [
+  ["overview", "Overview"],
+  ["quickstart", "Quickstart"],
+  ["api", "API reference"],
+  ["architecture", "Architecture"],
+  ["vault", "The Vault"],
+  ["testing", "Testing"],
+] as const;
+
 export default function DocsPage() {
+  const [activeSection, setActiveSection] = useState<(typeof docSections)[number][0]>("overview");
+
+  useEffect(() => {
+    let ticking = false;
+    const updateActiveSection = () => {
+      ticking = false;
+      const probeY = window.innerHeight * 0.34;
+      let current: (typeof docSections)[number][0] = "overview";
+      for (let i = docSections.length - 1; i >= 0; i--) {
+        const id = docSections[i][0];
+        const section = document.getElementById(id);
+        if (section && section.getBoundingClientRect().top <= probeY) {
+          current = id;
+          break;
+        }
+      }
+      setActiveSection(current);
+    };
+    const requestUpdate = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(updateActiveSection);
+    };
+    updateActiveSection();
+    window.addEventListener("scroll", requestUpdate, { passive: true });
+    window.addEventListener("resize", requestUpdate);
+    return () => {
+      window.removeEventListener("scroll", requestUpdate);
+      window.removeEventListener("resize", requestUpdate);
+    };
+  }, []);
+
   return (
     <div className="docs-page">
       <header className="docs-topbar">
@@ -43,12 +85,15 @@ export default function DocsPage() {
       <div className="docs-layout">
         <aside className="docs-sidebar">
           <nav aria-label="Documentation sections">
-            <a href="#overview">Overview</a>
-            <a href="#quickstart">Quickstart</a>
-            <a href="#api">API reference</a>
-            <a href="#architecture">Architecture</a>
-            <a href="#vault">The Vault</a>
-            <a href="#testing">Testing</a>
+            {docSections.map(([id, label]) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                aria-current={activeSection === id ? "true" : undefined}
+              >
+                {label}
+              </a>
+            ))}
           </nav>
         </aside>
 
