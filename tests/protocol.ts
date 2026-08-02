@@ -48,15 +48,33 @@ const sockA = MonSocket.connect({ key: keyA, contract: CONTRACT, rpc: RPC_URL })
 const sockB = MonSocket.connect({ key: keyB, contract: CONTRACT, rpc: RPC_URL });
 const sockS = MonSocket.connect({ key: keyS, contract: CONTRACT, rpc: RPC_URL });
 
+const deployerBal = await sockA.client.getBalance({ address: deployer.address });
+if (deployerBal < parseEther("0.45")) {
+  console.error(
+    `deployer ${deployer.address} holds ${formatEther(deployerBal)} MON — refill it ` +
+      `(POST https://agents.devnads.com/v1/faucet {"address":"${deployer.address}","chainId":10143})`,
+  );
+  process.exit(1);
+}
 console.log("funding burners from deployer…");
 for (const to of [sockA.address, sockB.address]) {
-  const hash = await funder.sendTransaction({ to, value: parseEther("0.2") });
-  await sockA.client.waitForTransactionReceipt({ hash });
+  const hash = await funder.sendTransaction({ to, value: parseEther("0.2"), gas: 21_000n });
+  const receipt = await sockA.client.waitForTransactionReceipt({ hash });
+  // Monad's deferred validation can include-and-fail a tx — never assume.
+  if (receipt.status !== "success") {
+    console.error(`funding tx ${hash} failed onchain`);
+    process.exit(1);
+  }
 }
+const balA = await sockA.balance();
+const balB = await sockB.balance();
 console.log(
-  `A ${sockA.address} ${formatEther(await sockA.balance())} MON · ` +
-    `B ${sockB.address} ${formatEther(await sockB.balance())} MON`,
+  `A ${sockA.address} ${formatEther(balA)} MON · B ${sockB.address} ${formatEther(balB)} MON`,
 );
+if (balA === 0n || balB === 0n) {
+  console.error("burners unfunded despite receipts — aborting");
+  process.exit(1);
+}
 
 type Player = { x: number; y: number; name: string };
 type Chat = { text: string };

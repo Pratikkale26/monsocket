@@ -86,6 +86,24 @@ export class MonSocket {
     return this.client.getBalance({ address: this.address });
   }
 
+  private noncePromise: Promise<number> | null = null;
+
+  /** Hand out the next nonce, serializing the initial fetch — two writes
+   *  racing at startup must never share a nonce (one tx would silently
+   *  drop). */
+  private async nextNonce(): Promise<number> {
+    if (this.nonce === null) {
+      if (!this.noncePromise) {
+        this.noncePromise = this.client
+          .getTransactionCount({ address: this.address, blockTag: "latest" })
+          .finally(() => (this.noncePromise = null));
+      }
+      const base = await this.noncePromise;
+      if (this.nonce === null) this.nonce = base;
+    }
+    return this.nonce++;
+  }
+
   /** Sign + fire one contract call using the local nonce counter. Returns
    *  the tx hash without waiting for inclusion — realtime writes are
    *  fire-and-forget; the log stream is the acknowledgement. */
@@ -93,13 +111,7 @@ export class MonSocket {
     fn: "broadcast" | "send" | "setState",
     args: readonly unknown[],
   ): Promise<Hex> {
-    if (this.nonce === null) {
-      this.nonce = await this.client.getTransactionCount({
-        address: this.address,
-        blockTag: "latest",
-      });
-    }
-    const nonce = this.nonce++;
+    const nonce = await this.nextNonce();
     const serialized = await this.account.signTransaction({
       to: this.contract,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

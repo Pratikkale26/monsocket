@@ -77,7 +77,7 @@ const fmtTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
-const EXPLORER = `https://testnet.monadexplorer.com/address/${CONTRACT}`;
+const EXPLORER = `https://testnet.monadvision.com/address/${CONTRACT}`;
 
 export default function App() {
   const [phase, setPhase] = useState<"funding" | "connecting" | "live" | "error">(
@@ -294,13 +294,15 @@ export default function App() {
       lastSend = now;
       sentAt.current = now;
       sent.current += 1;
-      void room()?.broadcast({
-        x: Math.round(me.x),
-        y: Math.round(me.y),
-        facing: me.facing,
-        carry: carryRef.current ? 1 : 0,
-        name,
-      });
+      room()
+        ?.broadcast({
+          x: Math.round(me.x),
+          y: Math.round(me.y),
+          facing: me.facing,
+          carry: carryRef.current ? 1 : 0,
+          name,
+        })
+        .catch(() => {}); // a dropped presence tx heals on the next beat
     };
 
     const lv = () => levelOf(vault.current);
@@ -334,13 +336,22 @@ export default function App() {
         buf.current = "";
         return;
       }
-      if (/^[0-9]$/.test(e.key)) {
+      // Digits by PHYSICAL key code first (Digit1/Numpad1) — e.key lies on
+      // some layouts/IME states, exactly like the old d-key bug.
+      const digit = /^Digit[0-9]$/.test(e.code)
+        ? e.code.slice(5)
+        : /^Numpad[0-9]$/.test(e.code)
+          ? e.code.slice(6)
+          : /^[0-9]$/.test(e.key)
+            ? e.key
+            : null;
+      if (digit !== null) {
         if (lv().mech.locks !== "codes") return;
         const pad = myPad();
         const theirs = myRole() === 0 ? lv().pos.k : lv().pos.K;
         if (near(me.x, me.y, pad.x, pad.y, 1.6)) {
           sfx.key();
-          enterDigit(e.key);
+          enterDigit(digit);
         } else if (near(me.x, me.y, theirs.x, theirs.y, 1.6)) {
           chats.current.set(selfKey, {
             text: "partner's keypad — yours has the yellow border",
@@ -685,13 +696,14 @@ export default function App() {
 
   const sendChat = (e: React.FormEvent) => {
     e.preventDefault();
-    const text = chatDraft.trim();
+    // Cap the payload: chat rides in calldata under a fixed gas limit.
+    const text = chatDraft.trim().slice(0, 140);
     if (!text) {
       chatInputRef.current?.blur();
       return;
     }
     sent.current += 1;
-    void roomRef.current?.emit("chat", { text });
+    roomRef.current?.emit("chat", { text }).catch(() => {});
     setChatDraft("");
     chatInputRef.current?.blur();
   };
