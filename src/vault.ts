@@ -299,7 +299,7 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
   const on = (t: string) => o.meTile === t || o.partnerTile === t;
 
   const floor = (x: number, y: number, v: number) => {
-    ctx.fillStyle = ["#262833", "#292b37", "#242631"][v];
+    ctx.fillStyle = ["#232427", "#26272b", "#212225"][v];
     ctx.fillRect(x, y, TILE, TILE);
   };
 
@@ -311,9 +311,9 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
       const ch = lv.tile(c, r);
       switch (ch) {
         case "#": {
-          ctx.fillStyle = ["#3d4150", "#424656", "#393d4b"][v];
+          ctx.fillStyle = ["#3c3b42", "#413f47", "#38373e"][v];
           ctx.fillRect(x, y, TILE, TILE);
-          ctx.fillStyle = "#31343f";
+          ctx.fillStyle = "#302f35";
           ctx.fillRect(x, y + TILE - 4, TILE, 4);
           break;
         }
@@ -441,6 +441,35 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
   }
 
   ctx.textAlign = "center";
+
+  // Guide rings: softly pulse around the CURRENT stage's puzzle elements,
+  // so the room itself tells you where the action is.
+  if (!o.frozen) {
+    const stage =
+      !(o.doors & DOOR1)
+        ? 0
+        : !(o.doors & LOCK1) || !(o.doors & LOCK2)
+          ? 1
+          : !(o.doors & LATCH)
+            ? 2
+            : 3;
+    const ACTIVE = [
+      MECH_CHARS[mech.door1],
+      MECH_CHARS[mech.locks],
+      MECH_CHARS[mech.latch],
+      "AB",
+    ][stage];
+    const pulse01 = 0.5 + Math.sin(o.t / 320) * 0.5;
+    for (const ch of [...ACTIVE]) {
+      const p = lv.pos[ch];
+      if (!p) continue;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 13 + pulse01 * 3, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(230, 188, 102, ${(0.18 + pulse01 * 0.22).toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
 
   const plate = (p: { x: number; y: number }, lit: boolean) => {
     ctx.beginPath();

@@ -1082,12 +1082,7 @@ export default function App() {
                 {copiedLink === "watch" ? "copied ✓" : "copy watch link"}
               </button>
             )}
-            <span className="metric">
-              lvl {level + 1}/{LEVELS.length} · {lvName}
-            </span>
-            {clock && <span className="metric">⏱ {clock}</span>}
-            <span className="metric">{txCount} Monad txs</span>
-            {echo !== null && <span className="metric">{echo}ms onchain echo</span>}
+            <span className="status-spacer" />
             <button onClick={() => setShowHint(true)}>how to play</button>
             <button
               aria-label={mute ? "unmute sound" : "mute sound"}
@@ -1119,25 +1114,6 @@ export default function App() {
               <span>🧾 every action a real tx</span>
               <span>📺 spectating is free — no wallet</span>
             </div>
-          </div>
-
-          <VaultPreview />
-
-          <div className="levels-row">
-            {LEVELS.map((lv, i) => (
-              <div key={lv.name} className={`level-card lv${i}`}>
-                <div className="lv-top">
-                  <span className="lv-num">LEVEL {i + 1}</span>
-                  <span className="lv-ico">{["🔐", "☢️", "🌀"][i]}</span>
-                </div>
-                <div className="lv-name">{lv.name}</div>
-                <div className="lv-puzzles">
-                  {STEP_LABEL[lv.mech.door1]} · {STEP_LABEL[lv.mech.locks]} ·{" "}
-                  {STEP_LABEL[lv.mech.latch]}
-                </div>
-                <div className="lv-window">key window {(lv.keyWindowMs / 1000).toFixed(1)}s</div>
-              </div>
-            ))}
           </div>
 
           {watchMode ? (
@@ -1220,6 +1196,25 @@ export default function App() {
               </div>
             </div>
           )}
+          <VaultPreview />
+
+          <div className="levels-row">
+            {LEVELS.map((lv, i) => (
+              <div key={lv.name} className={`level-card lv${i}`}>
+                <div className="lv-top">
+                  <span className="lv-num">LEVEL {i + 1}</span>
+                  <span className="lv-ico">{["🔐", "☢️", "🌀"][i]}</span>
+                </div>
+                <div className="lv-name">{lv.name}</div>
+                <div className="lv-puzzles">
+                  {STEP_LABEL[lv.mech.door1]} · {STEP_LABEL[lv.mech.locks]} ·{" "}
+                  {STEP_LABEL[lv.mech.latch]}
+                </div>
+                <div className="lv-window">key window {(lv.keyWindowMs / 1000).toFixed(1)}s</div>
+              </div>
+            ))}
+          </div>
+
           {error && <p className="error">{error}</p>}
         </div>
       )}
@@ -1249,6 +1244,17 @@ export default function App() {
 
       <div className="game-wrap" style={{ display: phase === "live" ? "grid" : "none" }}>
         <div>
+        <div className="hud">
+          <span className="hud-level">
+            CHAMBER 0{level + 1} — {lvName.toUpperCase()}
+          </span>
+          <span className="hud-right">
+            <span className="hud-online">
+              {watchMode ? `watching · ${online}/2 in` : `${online}/2 in`}
+            </span>
+            {clock && <span className="hud-clock">{clock}</span>}
+          </span>
+        </div>
         <div className="stage">
         <canvas
           ref={canvasRef}
@@ -1363,18 +1369,6 @@ export default function App() {
           </div>
         )}
         </div>
-        {objective && !out && !cleared && (
-          <div className="objective" key={objective}>
-            {objective}
-          </div>
-        )}
-        <div className="steps">
-          {steps.map(([label, done]) => (
-            <span key={label} className={done ? "step done" : "step"}>
-              {done ? "✓" : "○"} {label}
-            </span>
-          ))}
-        </div>
         {!watchMode && (
           <form className="chatbar" onSubmit={sendChat}>
             <input
@@ -1388,24 +1382,42 @@ export default function App() {
           </form>
         )}
         </div>
-        <aside className="feed">
-          <div className="feed-head">
-            <span className="dot live" /> monad tx feed
-          </div>
-          <div className="feed-stream">presence stream · {presenceTx.current} txs</div>
-          {feed.current.length === 0 ? (
-            <div className="feed-empty">
-              every chat line and puzzle write lands here the moment it hits the
-              chain — movement streams above
+        <aside className="side">
+          {objective && !out && !cleared && (
+            <div className="objective" key={objective}>
+              {objective}
             </div>
-          ) : (
-            feed.current.slice(0, 8).map((f) => (
-              <div key={f.id} className="feed-item">
-                <span className="feed-ico">{f.ico}</span>
-                <span>{f.text}</span>
-              </div>
-            ))
           )}
+          <div className="steps">
+            {steps.map(([label, done]) => (
+              <span key={label} className={done ? "step done" : "step"}>
+                {done ? "✓" : "○"} {label}
+              </span>
+            ))}
+          </div>
+          <div className="feed">
+            <div className="feed-head">
+              <span className="dot live" /> monad tx feed
+            </div>
+            <div className="feed-stream">
+              presence · {presenceTx.current} txs
+              {echo !== null ? ` · ${echo}ms echo` : ""}
+            </div>
+            <div className="feed-stream">{txCount} txs sent this session</div>
+            {feed.current.length === 0 ? (
+              <div className="feed-empty">
+                every chat line and puzzle write lands here the moment it hits
+                the chain — movement streams above
+              </div>
+            ) : (
+              feed.current.slice(0, 7).map((f) => (
+                <div key={f.id} className="feed-item">
+                  <span className="feed-ico">{f.ico}</span>
+                  <span>{f.text}</span>
+                </div>
+              ))
+            )}
+          </div>
         </aside>
       </div>
 
