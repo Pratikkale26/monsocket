@@ -5,7 +5,9 @@
   "license": "MIT",
   "type": "module",
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "scripts": {
     "dev": "vite",
@@ -15,6 +17,7 @@
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
+    "motion": "^12.43.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "viem": "^2.21.0"

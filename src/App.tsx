@@ -33,6 +33,7 @@ import {
 } from "./vault";
 import { isMuted, setMuted, sfx } from "./sound";
 import { loadBurnerKey } from "./wallet";
+import { BicepsFlexedIcon } from "./components/ui/biceps-flexed";
 
 const burnerKey = loadBurnerKey();
 const params = new URLSearchParams(location.search);
@@ -173,6 +174,58 @@ function VaultPreview() {
 
 const EXPLORER = `https://testnet.monadvision.com/address/${CONTRACT}`;
 
+const LANDING_FACTS = [
+  ["every move", "signed Monad tx"],
+  ["spectate", "0 MON read-only"],
+  ["polling", "~250ms getLogs"],
+  ["demo", "3 chambers / 9 puzzles"],
+  ["contract", "deployed testnet"],
+] as const;
+
+const CHAMBER_COPY = [
+  {
+    lead: "01",
+    name: "The Vault",
+    title: "Trust starts with two people standing on the plates.",
+    body: "Simultaneous plates, partner-only code relay, a held gate, and a final key turn inside a two-second window.",
+  },
+  {
+    lead: "02",
+    name: "The Reactor",
+    title: "The room gets hotter when state is shared in public.",
+    body: "Valve pairs, a fuel run through live coolant, and a vent stream that only one player can freeze for the other.",
+  },
+  {
+    lead: "03",
+    name: "The Core",
+    title: "Your partner sees the danger you cannot.",
+    body: "Cracked glass, cross-held lever gates, pulse walls, charge pads, and a shrinking synchronized key window.",
+  },
+] as const;
+
+const FAQS = [
+  [
+    "Is every movement really a transaction?",
+    "Yes. Player presence is broadcast through signed Monad transactions. The renderer buffers those samples and interpolates them to smooth 60fps motion.",
+  ],
+  [
+    "Why does the burner need MON?",
+    "Players write presence, chat, and puzzle state to Monad, so the local burner wallet needs testnet MON for gas. The page shows the burner address and balance before entry.",
+  ],
+  [
+    "Why is spectating free?",
+    "Watch mode only reads logs and contract state. Reading the chain costs nothing, so spectators do not need a wallet or funds.",
+  ],
+  [
+    "What is stored onchain?",
+    "Presence and chat are event logs. The shared room state lives in contract storage so late joiners can read the current chamber without replaying history.",
+  ],
+  [
+    "Is monsocket only for this game?",
+    "No. The Vault is a demo for the room API: broadcast for presence, emit for ephemeral events, and setState for shared room state.",
+  ],
+] as const;
+
 export default function App() {
   const [phase, setPhase] = useState<"funding" | "connecting" | "live" | "error">(
     "funding",
@@ -201,6 +254,8 @@ export default function App() {
   const [keypadOn, setKeypadOn] = useState(false);
   const [padBuf, setPadBuf] = useState("");
   const [copiedLink, setCopiedLink] = useState<"invite" | "watch" | null>(null);
+  const [openFaq, setOpenFaq] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [, setUiTick] = useState(0); // repaint driver for ref-backed feed
 
   const copyLink = (kind: "invite" | "watch") => {
@@ -1065,7 +1120,7 @@ export default function App() {
   ];
 
   return (
-    <div className="app">
+    <div className={`app${phase === "funding" ? " landing-app" : ""}`}>
       <header>
         <h1>
           monsocket <span className="tag">THE VAULT — a two-player heist on Monad</span>
@@ -1101,122 +1156,254 @@ export default function App() {
       </header>
 
       {phase === "funding" && (
-        <div className="title">
-          <div className="hero">
-            <div className="kicker">monsocket presents · a two-player heist</div>
-            <h2 className="game-title">THE VAULT</h2>
-            <div className="hero-sub">
-              nine puzzles that are impossible alone — and every step, chat
-              line, and key turn is a real transaction on Monad
+        <main className="title landing-page">
+          <section className="landing-hero" aria-labelledby="landing-title">
+            <div className="hero-atmosphere" aria-hidden="true">
+              <span className="silhouette s1" />
+              <span className="silhouette s2" />
+              <span className="silhouette s3" />
+              <span className="silhouette s4" />
             </div>
-            <div className="hero-tags">
-              <span>⚡ 300ms Monad blocks</span>
-              <span>🧾 every action a real tx</span>
-              <span>📺 spectating is free — no wallet</span>
-            </div>
-          </div>
+            <button
+              className="mobile-menu-button"
+              type="button"
+              aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileNavOpen}
+              onClick={() => setMobileNavOpen((open) => !open)}
+            >
+              <span />
+              <span />
+            </button>
+            <nav className={`landing-nav${mobileNavOpen ? " open" : ""}`} aria-label="Landing page">
+              <a href="https://github.com/Pratikkale26/monsocket" target="_blank" rel="noreferrer">
+                GitHub
+              </a>
+              <a href={EXPLORER} target="_blank" rel="noreferrer">
+                Contract
+              </a>
+              <span>Monad testnet</span>
+            </nav>
 
-          {watchMode ? (
-            <div className="join-card">
-              <p className="watch-blurb">
-                <b>spectator mode</b> — you're about to watch a live vault read
-                straight off Monad. There is no join transaction: reading the
-                chain is free, so watching needs no wallet and no funds.
-              </p>
-              <button className="primary cta" onClick={enter}>
-                ▶ WATCH THE HEIST LIVE
-              </button>
+            <div className="hero-shell">
+              <div className="hero-copy">
+                <p className="kicker">monsocket presents</p>
+                <h2 id="landing-title" className="game-title">
+                  THE VAULT
+                </h2>
+                <p className="hero-sub">
+                  Escape together. Prove every move onchain. A two-player co-op
+                  room where presence, chat, puzzle state, and the final key
+                  turn stream through Monad transactions.
+                </p>
+                <div className="hero-tags" aria-label="Product facts">
+                  <span className="hero-tag-strong">
+                    <BicepsFlexedIcon size={16} aria-hidden="true" />
+                    Two-player co-op
+                  </span>
+                  <span>No game server</span>
+                  <span>Free spectating</span>
+                  <span>Shared onchain state</span>
+                </div>
+              </div>
+
+              <div className="entry-panel" aria-label="Enter The Vault">
+                <div className="entry-panel-head">
+                  <span>Live entry</span>
+                  <b>{watchMode ? "read-only feed" : joinTarget ? "join room" : "new room"}</b>
+                </div>
+
+                {watchMode ? (
+                  <div className="join-card">
+                    <p className="watch-blurb">
+                      <b>Spectator mode</b>
+                      You are about to watch a live vault read straight off Monad.
+                      There is no join transaction, no wallet prompt, and no funds
+                      required.
+                    </p>
+                    <button className="primary cta" onClick={enter}>
+                      Watch the heist live
+                    </button>
+                  </div>
+                ) : (
+                  <div className="join-card">
+                    <div className="join-row">
+                      <label className="name-field">
+                        call sign
+                        <input
+                          value={name}
+                          maxLength={12}
+                          onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))}
+                        />
+                      </label>
+                      <div className="wallet-field">
+                        burner wallet
+                        <button
+                          type="button"
+                          className={`wallet-chip${balance !== null && balance >= 1 ? " ok" : ""}`}
+                          title="click to copy the full address"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(sock.address);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 1_500);
+                          }}
+                        >
+                          <span className="dot" />
+                          <code>
+                            {copied
+                              ? "address copied ✓"
+                              : `${sock.address.slice(0, 6)}…${sock.address.slice(-4)}`}
+                          </code>
+                          <span className="chip-bal">
+                            {balance === null ? "…" : `${balance.toFixed(2)} MON`}
+                          </span>
+                          <span className={`copy-ic${copied ? " done" : ""}`}>
+                            {copied ? "✓" : "copy"}
+                          </span>
+                        </button>
+                      </div>
+                      {!(balance !== null && balance >= 1) && (
+                        <a
+                          className="fund-btn"
+                          href="https://faucet.monad.xyz"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          get testnet MON ↗
+                        </a>
+                      )}
+                      <button
+                        className="fund-btn refresh-btn"
+                        aria-label="refresh balance"
+                        onClick={() => void refreshBalance()}
+                      >
+                        refresh
+                      </button>
+                    </div>
+                    <button
+                      className="primary cta"
+                      disabled={balance !== null && balance < 1}
+                      onClick={enter}
+                    >
+                      {joinTarget ? "Join the heist" : "Start a heist"}
+                    </button>
+                    <div className="join-note">
+                      {balance !== null && balance >= 1
+                        ? "gas covered — grab a partner and go"
+                        : "every move is a real Monad tx — send testnet MON to the burner, then refresh"}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          ) : (
-            <div className="join-card">
-              <div className="join-row">
-                <label className="name-field">
-                  call sign
-                  <input
-                    value={name}
-                    maxLength={12}
-                    onChange={(e) => setName(e.target.value.replace(/[^\w-]/g, ""))}
-                  />
-                </label>
-                <div className="wallet-field">
-                  burner wallet
+
+            <div className="proof-strip">
+              {LANDING_FACTS.map(([label, value]) => (
+                <div className="proof-item" key={label}>
+                  <span>{label}</span>
+                  <b>{value}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="landing-section preview-section" aria-labelledby="preview-title">
+            <div className="section-copy">
+              <p className="section-kicker">security monitor</p>
+              <h3 id="preview-title">The room is the proof.</h3>
+              <p>
+                This is not a trailer. The canvas below is the same vault renderer
+                the game uses, cycling through all three chambers while monsocket
+                turns low-frequency onchain presence into smooth local motion.
+              </p>
+            </div>
+            <VaultPreview />
+          </section>
+
+          <section className="landing-section chambers-section" aria-labelledby="chambers-title">
+            <div className="section-copy wide-copy">
+              <p className="section-kicker">three chambers</p>
+              <h3 id="chambers-title">Nine puzzles that refuse to be solved alone.</h3>
+            </div>
+            <div className="levels-row">
+              {CHAMBER_COPY.map((lv, i) => (
+                <article key={lv.name} className={`level-card lv${i}`}>
+                  <span className="lv-ghost">{lv.lead}</span>
+                  <div className="lv-top">
+                    <span className="lv-num">CHAMBER {lv.lead}</span>
+                    <span className="lv-window">
+                      {(LEVELS[i].keyWindowMs / 1000).toFixed(1)}s key window
+                    </span>
+                  </div>
+                  <div className="lv-name">{lv.name}</div>
+                  <h4>{lv.title}</h4>
+                  <p>{lv.body}</p>
+                  <div className="lv-puzzles">
+                    {STEP_LABEL[LEVELS[i].mech.door1]} / {STEP_LABEL[LEVELS[i].mech.locks]} /{" "}
+                    {STEP_LABEL[LEVELS[i].mech.latch]}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="landing-section network-section" aria-labelledby="network-title">
+            <div className="section-copy">
+              <p className="section-kicker">onchain networking</p>
+              <h3 id="network-title">Socket.io shape. Monad transport.</h3>
+              <p>
+                Presence and chat are log-only writes. Shared room state is a
+                single onchain truth. Late joiners read it directly; spectators
+                only listen.
+              </p>
+            </div>
+            <div className="code-panel" aria-label="Monsocket API sample">
+              <code>room.broadcast(position)</code>
+              <span>presence tx, interpolated locally</span>
+              <code>room.emit("chat", message)</code>
+              <span>event logs, zero storage</span>
+              <code>room.setState(vault)</code>
+              <span>shared state, seq-ordered onchain</span>
+            </div>
+          </section>
+
+          <section className="landing-section spectator-section" aria-labelledby="spectator-title">
+            <div className="spectator-feed" aria-hidden="true">
+              <span className="live-dot" />
+              <b>LIVE READ</b>
+              <i>room logs / proposed state / no wallet</i>
+            </div>
+            <div className="section-copy">
+              <p className="section-kicker">watch mode</p>
+              <h3 id="spectator-title">Reading is free. The audience needs nothing.</h3>
+              <p>
+                Add <code>&watch=1</code> to an invite link and anyone can watch
+                the run as a read-only security feed. No join transaction exists
+                for spectators.
+              </p>
+            </div>
+          </section>
+
+          <section className="landing-section faq-section" aria-labelledby="faq-title">
+            <h3 id="faq-title">FAQ</h3>
+            <div className="faq-list">
+              {FAQS.map(([question, answer], i) => (
+                <div className={`faq-row${openFaq === i ? " open" : ""}`} key={question}>
                   <button
                     type="button"
-                    className={`wallet-chip${balance !== null && balance >= 1 ? " ok" : ""}`}
-                    title="click to copy the full address"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(sock.address);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1_500);
-                    }}
+                    aria-expanded={openFaq === i}
+                    onClick={() => setOpenFaq(openFaq === i ? -1 : i)}
                   >
-                    <span className="dot" />
-                    <code>
-                      {copied
-                        ? "address copied ✓"
-                        : `${sock.address.slice(0, 6)}…${sock.address.slice(-4)}`}
-                    </code>
-                    <span className="chip-bal">
-                      {balance === null ? "…" : `${balance.toFixed(2)} MON`}
-                    </span>
-                    <span className={`copy-ic${copied ? " done" : ""}`}>
-                      {copied ? "✓" : "⧉ copy"}
-                    </span>
+                    <span>{question}</span>
+                    <b>{openFaq === i ? "−" : "+"}</b>
                   </button>
+                  <p>{answer}</p>
                 </div>
-                {!(balance !== null && balance >= 1) && (
-                  <a
-                    className="fund-btn"
-                    href="https://faucet.monad.xyz"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    get testnet MON ↗
-                  </a>
-                )}
-                <button
-                  className="fund-btn"
-                  aria-label="refresh balance"
-                  onClick={() => void refreshBalance()}
-                >
-                  ↻
-                </button>
-              </div>
-              <button
-                className="primary cta"
-                disabled={balance !== null && balance < 1}
-                onClick={enter}
-              >
-                {joinTarget ? "▶ JOIN THE HEIST" : "▶ START A HEIST"}
-              </button>
-              <div className="join-note">
-                {balance !== null && balance >= 1
-                  ? "gas covered — grab a partner and go"
-                  : "every move is a real Monad tx — send ~10 testnet MON to the burner (click the chip to copy), then ↻"}
-              </div>
+              ))}
             </div>
-          )}
-          <VaultPreview />
-
-          <div className="levels-row">
-            {LEVELS.map((lv, i) => (
-              <div key={lv.name} className={`level-card lv${i}`}>
-                <div className="lv-top">
-                  <span className="lv-num">LEVEL {i + 1}</span>
-                  <span className="lv-ico">{["🔐", "☢️", "🌀"][i]}</span>
-                </div>
-                <div className="lv-name">{lv.name}</div>
-                <div className="lv-puzzles">
-                  {STEP_LABEL[lv.mech.door1]} · {STEP_LABEL[lv.mech.locks]} ·{" "}
-                  {STEP_LABEL[lv.mech.latch]}
-                </div>
-                <div className="lv-window">key window {(lv.keyWindowMs / 1000).toFixed(1)}s</div>
-              </div>
-            ))}
-          </div>
+          </section>
 
           {error && <p className="error">{error}</p>}
-        </div>
+        </main>
       )}
 
       {phase === "connecting" && (
