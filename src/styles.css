@@ -11,6 +11,8 @@
   --good: #4ade80;
   --warn: #facc15;
   --bad: #f87171;
+  --font-ui: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-px: "Press Start 2P", ui-monospace, monospace;
 }
 
 * {
@@ -19,9 +21,21 @@
 
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   background:
-    radial-gradient(1000px 500px at 50% -10%, rgba(131, 110, 249, 0.08), transparent 60%),
+    radial-gradient(1000px 500px at 50% -10%, rgba(131, 110, 249, 0.1), transparent 60%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 39px,
+      rgba(131, 110, 249, 0.025) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 39px,
+      rgba(131, 110, 249, 0.025) 40px
+    ),
     var(--bg);
   color: var(--text);
 }
@@ -206,18 +220,25 @@ button.primary:disabled {
   align-items: start;
 }
 
+/* the vault bezel: canvas sits in a machined frame */
 .stage {
   position: relative;
+  padding: 8px;
+  background: linear-gradient(180deg, #1e1834, #131021);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 24px 60px -35px rgba(131, 110, 249, 0.55);
 }
 
-canvas {
+.stage > canvas {
   display: block;
   width: 100%;
   image-rendering: pixelated;
-  border-radius: 14px;
-  border: 1px solid var(--line);
+  border-radius: 12px;
+  border: 1px solid #0a0812;
   background: #0f1016;
-  box-shadow: 0 20px 50px -30px rgba(131, 110, 249, 0.35);
 }
 
 /* ── live Monad tx feed ── */
@@ -237,10 +258,11 @@ canvas {
 }
 
 .feed-head {
-  font-size: 10px;
-  letter-spacing: 0.22em;
+  font-family: var(--font-px);
+  font-size: 7px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--accent-soft);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -411,6 +433,7 @@ canvas {
 .lvlcard {
   position: absolute;
   inset: 0;
+  border-radius: 18px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -424,15 +447,18 @@ canvas {
 }
 
 .lvlcard span {
-  font-size: 11px;
-  letter-spacing: 0.4em;
+  font-family: var(--font-px);
+  font-size: 9px;
+  letter-spacing: 0.3em;
   color: var(--accent-soft);
 }
 
 .lvlcard b {
-  font-size: 30px;
-  letter-spacing: 0.14em;
+  font-family: var(--font-px);
+  font-size: 22px;
+  letter-spacing: 0.08em;
   color: #fff;
+  text-shadow: 0 0 20px rgba(131, 110, 249, 0.6);
 }
 
 .lvlcard i {
@@ -455,7 +481,7 @@ canvas {
 .scanlines {
   position: absolute;
   inset: 0;
-  border-radius: 14px;
+  border-radius: 18px;
   pointer-events: none;
   z-index: 2;
   background: repeating-linear-gradient(
@@ -565,14 +591,77 @@ canvas {
 }
 
 .game-title {
-  font-size: 48px;
-  letter-spacing: 0.26em;
-  padding-left: 0.26em;
-  margin: 8px 0 10px;
-  background: linear-gradient(180deg, #ffffff, var(--accent-soft));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-family: var(--font-px);
+  font-size: 34px;
+  letter-spacing: 0.08em;
+  margin: 14px 0 14px;
+  color: #fff;
+  text-shadow:
+    0 0 24px rgba(131, 110, 249, 0.65),
+    0 4px 0 rgba(131, 110, 249, 0.35);
+  animation: flicker 5s infinite;
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  93% {
+    opacity: 0.55;
+  }
+  94% {
+    opacity: 1;
+  }
+  96.5% {
+    opacity: 0.75;
+  }
+  97.5% {
+    opacity: 1;
+  }
+}
+
+.kicker {
+  font-family: var(--font-px);
+  font-size: 8px;
+  letter-spacing: 0.2em;
+}
+
+/* attract-mode world preview */
+.preview-wrap {
+  position: relative;
+  margin-top: 14px;
+  border-radius: 16px;
+  padding: 8px;
+  background: linear-gradient(180deg, #1c1631, #131020);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px -35px rgba(131, 110, 249, 0.55);
+}
+
+.preview {
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: #0f1016;
+}
+
+.preview-chip {
+  position: absolute;
+  top: -8px;
+  left: 18px;
+  z-index: 1;
+  font-family: var(--font-px);
+  font-size: 7px;
+  letter-spacing: 0.15em;
+  color: #0f0d17;
+  background: var(--accent);
+  border-radius: 5px;
+  padding: 4px 8px;
 }
 
 .hero-sub {
@@ -633,9 +722,21 @@ canvas {
   --acc: #22d3ee;
 }
 
+.lv-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lv-ico {
+  font-size: 16px;
+  filter: saturate(1.2);
+}
+
 .lv-num {
-  font-size: 10px;
-  letter-spacing: 0.25em;
+  font-family: var(--font-px);
+  font-size: 7px;
+  letter-spacing: 0.2em;
   color: var(--acc);
 }
 
@@ -754,11 +855,22 @@ canvas {
 }
 
 button.cta {
-  font-size: 14px;
-  font-weight: 600;
-  padding: 12px 16px;
-  border-radius: 10px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-px);
+  font-size: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  letter-spacing: 0.06em;
+  box-shadow: 0 6px 0 #4c3ab8, 0 14px 30px -12px rgba(131, 110, 249, 0.6);
+}
+
+button.cta:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 0 #4c3ab8, 0 16px 34px -12px rgba(131, 110, 249, 0.7);
+}
+
+button.cta:not(:disabled):active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #4c3ab8;
 }
 
 .join-note {
@@ -798,6 +910,84 @@ button.cta {
 
 .footer .sep {
   opacity: 0.4;
+}
+
+/* ── clickable keypad (shows when you're at YOUR pad) ── */
+
+.keypad {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 6;
+  background: rgba(15, 13, 23, 0.95);
+  backdrop-filter: blur(6px);
+  border: 1px solid #46396f;
+  border-radius: 14px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  animation: hint-in2 0.2s ease-out;
+  box-shadow: 0 16px 40px -18px rgba(131, 110, 249, 0.6);
+}
+
+@keyframes hint-in2 {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.keypad-buf {
+  font-family: var(--font-px);
+  font-size: 12px;
+  color: var(--warn);
+  background: #0a0812;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  min-width: 108px;
+  text-align: center;
+}
+
+.keypad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 36px);
+  gap: 6px;
+}
+
+.keypad-key {
+  font-family: var(--font-px);
+  font-size: 11px;
+  width: 36px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  background: #241d3e;
+  border: 1px solid #46396f;
+  box-shadow: 0 3px 0 #171128;
+}
+
+.keypad-key:hover {
+  background: #2f2650;
+}
+
+.keypad-key:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #171128;
+}
+
+.keypad-note {
+  font-size: 10px;
+  color: var(--muted);
+  max-width: 130px;
+  text-align: center;
+  line-height: 1.4;
 }
 
 @media (max-width: 860px) {

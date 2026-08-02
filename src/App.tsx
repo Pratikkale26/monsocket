@@ -77,6 +77,72 @@ const fmtTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
+/** Title-screen attract mode: the real game world, rendered live, cycling
+ *  through all three chambers — coolant shimmering, pulse walls beating. */
+function VaultPreview() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const ctx = ref.current!.getContext("2d")!;
+    let raf = 0;
+    let lvIdx = 0;
+    let switchAt = Date.now() + 4_000;
+    const loop = (t: number) => {
+      if (Date.now() > switchAt) {
+        lvIdx = (lvIdx + 1) % LEVELS.length;
+        switchAt = Date.now() + 4_000;
+      }
+      const L = LEVELS[lvIdx];
+      drawVault(ctx, L, {
+        t,
+        doors: 0,
+        frozen: false,
+        role: -1,
+        seeCode: [],
+        buf: "",
+        meTile: "",
+        partnerTile: "",
+        keyA: 0,
+        keyB: 0,
+        keyWindowMs: L.keyWindowMs,
+        pulseOn: pulseOpen(1, Date.now()),
+        valveHalf: 0,
+        valveAt: 0,
+        carryMe: false,
+        carryPartner: false,
+        chargeFrac: 0,
+        ventOff: false,
+        heldI: false,
+        heldJ: false,
+      });
+      drawPlayer(
+        ctx,
+        "demo-you",
+        { x: L.spawn.x, y: L.spawn.y, facing: 0, name: "you" },
+        { self: true, t },
+      );
+      drawPlayer(
+        ctx,
+        "demo-p2",
+        { x: L.spawn.x + 34, y: L.spawn.y + 6, facing: 1, name: "partner" },
+        { t },
+      );
+      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "rgba(165,149,250,0.9)";
+      ctx.fillText(`CHAMBER 0${L.index + 1} · ${L.name.toUpperCase()}`, 10, HEIGHT - 10);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <div className="preview-wrap">
+      <span className="preview-chip">LIVE WORLD PREVIEW</span>
+      <canvas ref={ref} width={WIDTH} height={HEIGHT} className="preview" />
+    </div>
+  );
+}
+
 const EXPLORER = `https://testnet.monadvision.com/address/${CONTRACT}`;
 
 export default function App() {
@@ -104,6 +170,8 @@ export default function App() {
     win: number;
     until: number;
   } | null>(null);
+  const [keypadOn, setKeypadOn] = useState(false);
+  const [padBuf, setPadBuf] = useState("");
 
   const roomRef = useRef<Vault | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -123,6 +191,8 @@ export default function App() {
   const feed = useRef<{ id: number; ico: string; text: string }[]>([]);
   const feedId = useRef(0);
   const presenceTx = useRef(0);
+  const mePos = useRef({ x: 0, y: 0 }); // mirrored out of the game loop for the HTML keypad
+  const enterDigitRef = useRef<((d: string) => void) | null>(null);
   const shakeRef = useRef(0); // screen shake until-timestamp
   const parts = useRef<
     { x: number; y: number; vx: number; vy: number; life: number; color: string }[]
@@ -388,6 +458,12 @@ export default function App() {
       }
       buf.current = "";
     };
+    // The HTML keypad clicks route through the same entry path.
+    enterDigitRef.current = (d: string) => {
+      sfx.key();
+      enterDigit(d);
+      setPadBuf(buf.current);
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (watchMode) return; // spectators only watch
@@ -417,10 +493,11 @@ export default function App() {
         if (lv().mech.locks !== "codes") return;
         const pad = myPad();
         const theirs = myRole() === 0 ? lv().pos.k : lv().pos.K;
-        if (near(me.x, me.y, pad.x, pad.y, 1.6)) {
+        if (near(me.x, me.y, pad.x, pad.y, 2.2)) {
           sfx.key();
           enterDigit(digit);
-        } else if (near(me.x, me.y, theirs.x, theirs.y, 1.6)) {
+          setPadBuf(buf.current);
+        } else if (near(me.x, me.y, theirs.x, theirs.y, 2.2)) {
           chats.current.set(selfKey, {
             text: "partner's keypad — yours has the yellow border",
             until: Date.now() + 2_000,
@@ -490,6 +567,19 @@ export default function App() {
       setTxCount(sent.current);
       const others = [...remotes.current.keys()].filter((k) => k !== selfKey).length;
       setOnline(watchMode ? others : 1 + others);
+      // HTML keypad: visible whenever you're at YOUR pad with a lock to open
+      const Lc = levelOf(vault.current);
+      const myBit = myRole() === 0 ? LOCK2 : LOCK1;
+      const padPos = myRole() === 0 ? Lc.pos.K : Lc.pos.k;
+      setKeypadOn(
+        !watchMode &&
+          Lc.mech.locks === "codes" &&
+          !(vault.current.doors & myBit) &&
+          !solvedKeys(vault.current) &&
+          padPos !== undefined &&
+          near(mePos.current.x, mePos.current.y, padPos.x, padPos.y, 2.2),
+      );
+      setPadBuf(buf.current);
       const v = vault.current;
       if (v.run > 0)
         setClock(
@@ -579,6 +669,16 @@ export default function App() {
           if (walkable(L, nx, me.y, v.doors, held, pulse)) me.x = nx;
           if (walkable(L, me.x, ny, v.doors, held, pulse)) me.y = ny;
           me.facing = vy < 0 ? 3 : vx < 0 ? 1 : vx > 0 ? 2 : 0;
+          // footstep dust
+          if (Date.now() - lastMoved > 140)
+            parts.current.push({
+              x: me.x + (Math.random() - 0.5) * 8,
+              y: me.y + 9,
+              vx: (Math.random() - 0.5) * 12,
+              vy: -8 - Math.random() * 10,
+              life: 0.35,
+              color: "rgba(154,147,184,0.5)",
+            });
           lastMoved = Date.now();
         }
         if (Date.now() - lastMoved < 200) broadcast();
@@ -644,8 +744,10 @@ export default function App() {
       }
 
       // A half-typed code shouldn't linger: walking away clears the keypad.
-      if (mech.locks === "codes" && buf.current && !near(me.x, me.y, myPad().x, myPad().y, 1.6))
+      if (mech.locks === "codes" && buf.current && !near(me.x, me.y, myPad().x, myPad().y, 2.6))
         buf.current = "";
+      mePos.current.x = me.x;
+      mePos.current.y = me.y;
 
       // fx: sparks on doors opening, key turns, level clears
       if (v.doors !== fxDoors) {
@@ -770,6 +872,7 @@ export default function App() {
         drawPlayer(ctx, key, pp.data, {
           chat: chats.current.get(key),
           carry: !!pp.data.carry,
+          t: now,
         });
       }
       if (!watchMode)
@@ -777,7 +880,7 @@ export default function App() {
           ctx,
           selfKey,
           { x: me.x, y: me.y, facing: me.facing, name },
-          { self: true, chat: chats.current.get(selfKey), carry: carryRef.current },
+          { self: true, chat: chats.current.get(selfKey), carry: carryRef.current, t: now },
         );
 
       // particles
@@ -889,7 +992,7 @@ export default function App() {
     <div className="app">
       <header>
         <h1>
-          monsocket <span className="tag">The Vault — a two-player escape room on Monad</span>
+          monsocket <span className="tag">THE VAULT — a two-player heist on Monad</span>
         </h1>
         {phase === "live" && room && (
           <div className="status">
@@ -930,24 +1033,28 @@ export default function App() {
       {phase === "funding" && (
         <div className="title">
           <div className="hero">
-            <div className="kicker">monsocket presents</div>
+            <div className="kicker">monsocket presents · a two-player heist</div>
             <h2 className="game-title">THE VAULT</h2>
             <div className="hero-sub">
-              a two-player escape room on Monad — nine puzzles that are
-              impossible alone, and every move, chat line, and key turn is a
-              real transaction on the chain
+              nine puzzles that are impossible alone — and every step, chat
+              line, and key turn is a real transaction on Monad
             </div>
             <div className="hero-tags">
               <span>⚡ 300ms Monad blocks</span>
-              <span>every action a real tx</span>
-              <span>spectating is free — no wallet</span>
+              <span>🧾 every action a real tx</span>
+              <span>📺 spectating is free — no wallet</span>
             </div>
           </div>
+
+          <VaultPreview />
 
           <div className="levels-row">
             {LEVELS.map((lv, i) => (
               <div key={lv.name} className={`level-card lv${i}`}>
-                <div className="lv-num">LEVEL {i + 1}</div>
+                <div className="lv-top">
+                  <span className="lv-num">LEVEL {i + 1}</span>
+                  <span className="lv-ico">{["🔐", "☢️", "🌀"][i]}</span>
+                </div>
                 <div className="lv-name">{lv.name}</div>
                 <div className="lv-puzzles">
                   {STEP_LABEL[lv.mech.door1]} · {STEP_LABEL[lv.mech.locks]} ·{" "}
@@ -966,7 +1073,7 @@ export default function App() {
                 chain is free, so watching needs no wallet and no funds.
               </p>
               <button className="primary cta" onClick={enter}>
-                ▶ watch this vault live
+                ▶ WATCH THE HEIST LIVE
               </button>
             </div>
           ) : (
@@ -1025,7 +1132,7 @@ export default function App() {
                 disabled={balance !== null && balance < 1}
                 onClick={enter}
               >
-                {joinTarget ? "▶ enter your partner's vault" : "▶ open a new vault"}
+                {joinTarget ? "▶ JOIN THE HEIST" : "▶ START A HEIST"}
               </button>
               <div className="join-note">
                 {balance !== null && balance >= 1
@@ -1063,6 +1170,30 @@ export default function App() {
             <span>CHAMBER 0{levelCard.num}</span>
             <b>{levelCard.name.toUpperCase()}</b>
             <i>key window {(levelCard.win / 1000).toFixed(1)}s</i>
+          </div>
+        )}
+        {phase === "live" && keypadOn && (
+          <div className="keypad">
+            <div className="keypad-buf">{padBuf.padEnd(4, "·").split("").join(" ")}</div>
+            <div className="keypad-grid">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0"].map((k) => (
+                <button
+                  key={k}
+                  className="keypad-key"
+                  onClick={() => {
+                    if (k === "⌫") {
+                      buf.current = "";
+                      setPadBuf("");
+                    } else {
+                      enterDigitRef.current?.(k);
+                    }
+                  }}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+            <div className="keypad-note">type the 4 digits your partner reads out</div>
           </div>
         )}
         {phase === "live" && !watchMode && online < 2 && level === 0 && !(doors & DOOR1) && !out && (

@@ -645,16 +645,19 @@ export function drawPlayer(
   ctx: CanvasRenderingContext2D,
   key: string,
   p: { x: number; y: number; facing: number; name: string },
-  opts: { self?: boolean; chat?: Bubble; carry?: boolean },
+  opts: { self?: boolean; chat?: Bubble; carry?: boolean; t?: number },
 ) {
   const hue = hueOf(key);
   const { x, y } = p;
+  // idle bob — grounded shadow, floating body
+  const bob = opts.t !== undefined ? Math.sin(opts.t / 300 + hue) * 1.6 : 0;
+  const yb = y + bob;
   ctx.beginPath();
-  ctx.ellipse(x, y + 10, 8, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 10, 8 - bob * 0.6, 3, 0, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(0,0,0,0.25)";
   ctx.fill();
   ctx.beginPath();
-  ctx.roundRect(x - 9, y - 12, 18, 22, 6);
+  ctx.roundRect(x - 9, yb - 12, 18, 22, 6);
   ctx.fillStyle = `hsl(${hue} 65% ${opts.self ? 62 : 52}%)`;
   ctx.fill();
   ctx.lineWidth = 2;
@@ -664,14 +667,14 @@ export function drawPlayer(
   const eyeDx = p.facing === 1 ? -3 : p.facing === 2 ? 3 : 0;
   ctx.fillStyle = "#20222d";
   if (p.facing !== 3) {
-    ctx.fillRect(x - 4 + eyeDx, y - 6, 3, 4);
-    ctx.fillRect(x + 2 + eyeDx, y - 6, 3, 4);
+    ctx.fillRect(x - 4 + eyeDx, yb - 6, 3, 4);
+    ctx.fillRect(x + 2 + eyeDx, yb - 6, 3, 4);
   }
 
   if (opts.carry) {
     // the fuel cell rides on your head
     ctx.beginPath();
-    ctx.roundRect(x - 4, y - 22, 8, 11, 2);
+    ctx.roundRect(x - 4, yb - 22, 8, 11, 2);
     ctx.fillStyle = "#fbbf24";
     ctx.fill();
     ctx.strokeStyle = "#fde68a";
