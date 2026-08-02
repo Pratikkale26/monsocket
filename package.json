@@ -1,7 +1,7 @@
 {
   "name": "monsocket",
   "private": true,
-  "description": "Socket.io for Monad — realtime multiplayer rooms where every action is an onchain transaction",
+  "description": "Realtime multiplayer SDK for Monad with rooms, presence, events, shared state, and The Vault demo",
   "license": "MIT",
   "type": "module",
   "pnpm": {

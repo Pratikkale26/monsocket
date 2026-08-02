@@ -34,9 +34,14 @@ import {
 import { isMuted, setMuted, sfx } from "./sound";
 import { loadBurnerKey } from "./wallet";
 import { BicepsFlexedIcon } from "./components/ui/biceps-flexed";
+import DocsPage from "./Docs";
 
 const burnerKey = loadBurnerKey();
 const params = new URLSearchParams(location.search);
+const DOCS_URL = "https://docs.monsocket.xyz";
+const docsHref =
+  location.hostname === "127.0.0.1" || location.hostname === "localhost" ? "/docs" : DOCS_URL;
+const docsMode = location.pathname.startsWith("/docs") || location.hostname.startsWith("docs.");
 
 type Player = { x: number; y: number; facing: number; carry: number; name: string };
 type ChatMsg = { text: string };
@@ -174,56 +179,31 @@ function VaultPreview() {
 
 const EXPLORER = `https://testnet.monadvision.com/address/${CONTRACT}`;
 
-const LANDING_FACTS = [
-  ["every move", "signed Monad tx"],
-  ["spectate", "0 MON read-only"],
-  ["polling", "~250ms getLogs"],
-  ["demo", "3 chambers / 9 puzzles"],
-  ["contract", "deployed testnet"],
-] as const;
-
 const CHAMBER_COPY = [
   {
     lead: "01",
     name: "The Vault",
-    title: "Trust starts with two people standing on the plates.",
-    body: "Simultaneous plates, partner-only code relay, a held gate, and a final key turn inside a two-second window.",
+    title: "Two players. One escape.",
+    body: "Stand together, trade codes, hold gates, and hit the final key turn in sync.",
   },
   {
     lead: "02",
     name: "The Reactor",
-    title: "The room gets hotter when state is shared in public.",
-    body: "Valve pairs, a fuel run through live coolant, and a vent stream that only one player can freeze for the other.",
+    title: "The room pushes back.",
+    body: "Valve timing, fuel runs, vents, glass, and pulse walls force real coordination.",
   },
   {
     lead: "03",
     name: "The Core",
-    title: "Your partner sees the danger you cannot.",
-    body: "Cracked glass, cross-held lever gates, pulse walls, charge pads, and a shrinking synchronized key window.",
+    title: "Every solve is signed.",
+    body: "Presence, chat, puzzle state, and room progress stream through Monad testnet.",
   },
 ] as const;
 
-const FAQS = [
-  [
-    "Is every movement really a transaction?",
-    "Yes. Player presence is broadcast through signed Monad transactions. The renderer buffers those samples and interpolates them to smooth 60fps motion.",
-  ],
-  [
-    "Why does the burner need MON?",
-    "Players write presence, chat, and puzzle state to Monad, so the local burner wallet needs testnet MON for gas. The page shows the burner address and balance before entry.",
-  ],
-  [
-    "Why is spectating free?",
-    "Watch mode only reads logs and contract state. Reading the chain costs nothing, so spectators do not need a wallet or funds.",
-  ],
-  [
-    "What is stored onchain?",
-    "Presence and chat are event logs. The shared room state lives in contract storage so late joiners can read the current chamber without replaying history.",
-  ],
-  [
-    "Is monsocket only for this game?",
-    "No. The Vault is a demo for the room API: broadcast for presence, emit for ephemeral events, and setState for shared room state.",
-  ],
+const SOCKET_POINTS = [
+  ["Play together", "partner movement streams live through Monad"],
+  ["Invite instantly", "one room link for players, one free link for watchers"],
+  ["Prove the run", "chat, solves, and progress are written onchain"],
 ] as const;
 
 export default function App() {
@@ -254,7 +234,6 @@ export default function App() {
   const [keypadOn, setKeypadOn] = useState(false);
   const [padBuf, setPadBuf] = useState("");
   const [copiedLink, setCopiedLink] = useState<"invite" | "watch" | null>(null);
-  const [openFaq, setOpenFaq] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [, setUiTick] = useState(0); // repaint driver for ref-backed feed
 
@@ -1119,6 +1098,8 @@ export default function App() {
     ["keys", cleared || out],
   ];
 
+  if (docsMode) return <DocsPage />;
+
   return (
     <div className={`app${phase === "funding" ? " landing-app" : ""}`}>
       <header>
@@ -1175,6 +1156,9 @@ export default function App() {
               <span />
             </button>
             <nav className={`landing-nav${mobileNavOpen ? " open" : ""}`} aria-label="Landing page">
+              <a href={docsHref}>
+                Docs
+              </a>
               <a href="https://github.com/Pratikkale26/monsocket" target="_blank" rel="noreferrer">
                 GitHub
               </a>
@@ -1191,18 +1175,16 @@ export default function App() {
                   THE VAULT
                 </h2>
                 <p className="hero-sub">
-                  Escape together. Prove every move onchain. A two-player co-op
-                  room where presence, chat, puzzle state, and the final key
-                  turn stream through Monad transactions.
+                  A two-player escape room where every move, message, and solve
+                  is a Monad testnet transaction.
                 </p>
                 <div className="hero-tags" aria-label="Product facts">
                   <span className="hero-tag-strong">
                     <BicepsFlexedIcon size={16} aria-hidden="true" />
                     Two-player co-op
                   </span>
-                  <span>No game server</span>
-                  <span>Free spectating</span>
-                  <span>Shared onchain state</span>
+                  <span>Live onchain room</span>
+                  <span>Watch for free</span>
                 </div>
               </div>
 
@@ -1288,32 +1270,21 @@ export default function App() {
                     </button>
                     <div className="join-note">
                       {balance !== null && balance >= 1
-                        ? "gas covered — grab a partner and go"
-                        : "every move is a real Monad tx — send testnet MON to the burner, then refresh"}
+                        ? "gas covered - grab a partner and go"
+                        : "fund the burner with testnet MON, then refresh"}
                     </div>
                   </div>
                 )}
               </div>
             </div>
-
-            <div className="proof-strip">
-              {LANDING_FACTS.map(([label, value]) => (
-                <div className="proof-item" key={label}>
-                  <span>{label}</span>
-                  <b>{value}</b>
-                </div>
-              ))}
-            </div>
           </section>
 
-          <section className="landing-section preview-section" aria-labelledby="preview-title">
+          <section className="landing-section game-section" aria-labelledby="preview-title">
             <div className="section-copy">
-              <p className="section-kicker">security monitor</p>
-              <h3 id="preview-title">The room is the proof.</h3>
+              <p className="section-kicker">the game</p>
+              <h3 id="preview-title">Steal the vault together.</h3>
               <p>
-                This is not a trailer. The canvas below is the same vault renderer
-                the game uses, cycling through all three chambers while monsocket
-                turns low-frequency onchain presence into smooth local motion.
+                Three chambers, nine co-op puzzles, one synchronized exit.
               </p>
             </div>
             <VaultPreview />
@@ -1321,8 +1292,8 @@ export default function App() {
 
           <section className="landing-section chambers-section" aria-labelledby="chambers-title">
             <div className="section-copy wide-copy">
-              <p className="section-kicker">three chambers</p>
-              <h3 id="chambers-title">Nine puzzles that refuse to be solved alone.</h3>
+              <p className="section-kicker">inside the run</p>
+              <h3 id="chambers-title">Built for coordination, not grinding.</h3>
             </div>
             <div className="levels-row">
               {CHAMBER_COPY.map((lv, i) => (
@@ -1346,59 +1317,25 @@ export default function App() {
             </div>
           </section>
 
-          <section className="landing-section network-section" aria-labelledby="network-title">
+          <section className="landing-section monsocket-section" aria-labelledby="network-title">
             <div className="section-copy">
-              <p className="section-kicker">onchain networking</p>
-              <h3 id="network-title">Socket.io shape. Monad transport.</h3>
+              <p className="section-kicker">monsocket</p>
+              <h3 id="network-title">Realtime rooms for Monad games.</h3>
               <p>
-                Presence and chat are log-only writes. Shared room state is a
-                single onchain truth. Late joiners read it directly; spectators
-                only listen.
+                Monsocket is the engine under The Vault: it turns Monad
+                transactions into a playable co-op room.
               </p>
             </div>
-            <div className="code-panel" aria-label="Monsocket API sample">
-              <code>room.broadcast(position)</code>
-              <span>presence tx, interpolated locally</span>
-              <code>room.emit("chat", message)</code>
-              <span>event logs, zero storage</span>
-              <code>room.setState(vault)</code>
-              <span>shared state, seq-ordered onchain</span>
-            </div>
-          </section>
-
-          <section className="landing-section spectator-section" aria-labelledby="spectator-title">
-            <div className="spectator-feed" aria-hidden="true">
-              <span className="live-dot" />
-              <b>LIVE READ</b>
-              <i>room logs / proposed state / no wallet</i>
-            </div>
-            <div className="section-copy">
-              <p className="section-kicker">watch mode</p>
-              <h3 id="spectator-title">Reading is free. The audience needs nothing.</h3>
-              <p>
-                Add <code>&watch=1</code> to an invite link and anyone can watch
-                the run as a read-only security feed. No join transaction exists
-                for spectators.
-              </p>
-            </div>
-          </section>
-
-          <section className="landing-section faq-section" aria-labelledby="faq-title">
-            <h3 id="faq-title">FAQ</h3>
-            <div className="faq-list">
-              {FAQS.map(([question, answer], i) => (
-                <div className={`faq-row${openFaq === i ? " open" : ""}`} key={question}>
-                  <button
-                    type="button"
-                    aria-expanded={openFaq === i}
-                    onClick={() => setOpenFaq(openFaq === i ? -1 : i)}
-                  >
-                    <span>{question}</span>
-                    <b>{openFaq === i ? "−" : "+"}</b>
-                  </button>
-                  <p>{answer}</p>
+            <div className="socket-panel" aria-label="Why monsocket matters for players">
+              {SOCKET_POINTS.map(([title, label]) => (
+                <div className="socket-row" key={title}>
+                  <b>{title}</b>
+                  <span>{label}</span>
                 </div>
               ))}
+              <a className="docs-cta" href={docsHref}>
+                Read the docs
+              </a>
             </div>
           </section>
 
@@ -1609,7 +1546,11 @@ export default function App() {
       </div>
 
       <div className="footer">
-        <span>built on monsocket — Socket.io for Monad</span>
+        <span>built on monsocket - realtime SDK for Monad</span>
+        <span className="sep">·</span>
+        <a href={docsHref}>
+          docs
+        </a>
         <span className="sep">·</span>
         <a href="https://github.com/Pratikkale26/monsocket" target="_blank" rel="noreferrer">
           GitHub

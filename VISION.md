@@ -1,51 +1,39 @@
 # Where monsocket goes
 
-## The thesis
+## Thesis
 
-Every fast chain is about to have the same problem Solana had: the chain
-can do realtime, but every team hand-rolls the same plumbing — embedded
-wallets, raw sends, nonce hacks, log streaming, interpolation. Monad's own
-2048 guide *teaches* developers to write exactly this boilerplate.
-monsocket packages it behind the API every web developer already knows:
-**rooms, broadcast, subscribe.** (Its sibling [solsocket](https://github.com/Pratikkale26/solsocket)
-does the same on Solana — one realtime API, chain-agnostic apps.)
+Monad can make realtime onchain applications feel alive, but developers still
+need to solve the same low-level multiplayer plumbing: burner signing, nonce
+handling, log streaming, room state, interpolation, and spectator reads.
+
+monsocket packages that work into a small SDK for rooms, presence, events,
+and shared state.
 
 ## What gets built on top
 
-- **The Onchain Arcade** — a portal of instantly-playable multiplayer
-  games (The Vault is game #1), one identity, shared onchain leaderboards,
-  free spectating, later skill-based entry-fee tournaments. Because the
-  realtime layer is solved, a new game costs days, not months — a
-  game-a-week cadence.
-- **Community worlds** — persistent walkable towns for communities:
-  token-gated rooms, proximity chat, live events. Every community gets a
-  world; hosting and customization are the revenue.
-- **Agent coordination rooms** — AI agents need a shared, ordered,
-  *attributable* event bus to negotiate and coordinate; a monsocket room is
-  exactly that, with every message a signed Monad transaction a human (or
-  another agent) can audit live.
-- **Live onchain spectacles** — anything worth watching: speedrun races,
-  auctions, game shows. Watching is free by construction (reading the
-  chain costs nothing), so audiences scale without infra.
+- **The Onchain Arcade**: instantly playable multiplayer games on Monad,
+  starting with The Vault.
+- **Community worlds**: persistent rooms for events, token-gated spaces, and
+  proximity-style multiplayer experiences.
+- **Agent coordination rooms**: ordered, attributable event streams for
+  autonomous agents and humans.
+- **Live onchain spectacles**: races, auctions, game shows, and other events
+  where watching should be free.
 
 ## Roadmap
 
-1. **Now**: contract + client lib + The Vault, live on Monad testnet.
-2. **Batching**: N inputs per transaction — cuts per-player gas ~5-10x and
-   raises effective tick rate.
-3. **Sponsored sessions**: EIP-7702 delegation + paymaster so mainnet
-   players never hold MON — the app sponsors, monsocket meters.
-4. **Hosted low-latency relay**: a node running Category Labs' Execution
-   Events SDK (shared-memory event stream at proposal time) serving
-   websockets — the sub-300ms read path nobody has productized. This is
-   the moat and the SaaS.
-5. **Monad Games ID** integration: one identity + leaderboards across
-   every monsocket game.
-6. **One package, many chains**: `connect({ chain: "monad" | "solana" })`.
+1. **Now**: contract, client SDK, docs, and The Vault on Monad testnet.
+2. **Batching**: pack multiple inputs into one transaction to reduce gas and
+   raise effective tick rate.
+3. **Sponsored sessions**: let apps fund sessions so players do not manage
+   MON before playing.
+4. **Low-latency relay**: optional hosted read path for teams that want
+   websocket delivery over raw log polling.
+5. **Onchain Arcade**: shared identity, leaderboards, and multiple games on
+   the same room layer.
 
-## Honest positioning
+## Positioning
 
-Monad's floor is one 300ms block; monsocket delivers *realtime-feeling,
-~400ms-settled* multiplayer — perfect for co-op puzzles, turn exchanges,
-boards, auctions, agent coordination; wrong for 10Hz twitch shooters.
-Nothing on Monad occupies this niche today.
+monsocket is ideal for co-op games, board games, collaborative apps, live
+events, agent coordination, and experiences where signed realtime state
+matters. It is not trying to be netcode for twitch shooters.

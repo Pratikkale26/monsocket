@@ -2,7 +2,7 @@
  *  The AudioContext is created lazily on the first user gesture. */
 
 let ctx: AudioContext | null = null;
-let muted = localStorage.getItem("solsocket-escape:muted") === "1";
+let muted = localStorage.getItem("monsocket-escape:muted") === "1";
 
 function ac(): AudioContext | null {
   if (muted) return null;
@@ -19,7 +19,7 @@ function ac(): AudioContext | null {
 
 export function setMuted(m: boolean) {
   muted = m;
-  localStorage.setItem("solsocket-escape:muted", m ? "1" : "0");
+  localStorage.setItem("monsocket-escape:muted", m ? "1" : "0");
 }
 export const isMuted = () => muted;
 

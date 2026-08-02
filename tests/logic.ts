@@ -1,4 +1,4 @@
-/* Unit tests for escape-duo's pure game logic — run with node (type stripping).
+/* Unit tests for The Vault's pure game logic — run with node (type stripping).
  * Includes a BFS reachability prover: for EVERY level, each puzzle element is
  * reachable exactly when its prerequisites hold (door bits, held levers, a
  * suppressed vent, an open pulse) and never via a lethal tile — so no layout

@@ -4,7 +4,7 @@ You are redesigning the first screen of the existing Monsocket demo at `http://1
 
 ## Product Context
 
-Monsocket is "Socket.io for Monad": a realtime multiplayer room API where every action is a real Monad L1 transaction.
+Monsocket is a realtime multiplayer SDK for Monad: a room API for presence, events, shared state, and spectator reads. It should feel familiar to developers who have used realtime room libraries, but the product identity should lead with Monad multiplayer infrastructure rather than a comparison.
 
 The current demo is called "The Vault". It is a two-player co-op escape room on Monad testnet. The game has 3 chambers and 9 co-op puzzle mechanics:
 
@@ -230,4 +230,3 @@ Responsive targets:
 - The live `VaultPreview` canvas renders and remains visible.
 - Mobile layout has no overlapping text or clipped buttons.
 - The final visual language clearly matches the mockups: thin white typography, black/graphite surfaces, orange/red glow, minimal premium editorial composition.
-

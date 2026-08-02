@@ -1,8 +1,7 @@
 /**
- * monsocket — Socket.io for Monad.
+ * monsocket — realtime multiplayer rooms for Monad.
  *
- * The same rooms/broadcast/subscribe API as solsocket (its Solana sibling),
- * re-based on a Monad L1 transport:
+ * A small rooms/broadcast/subscribe API built on a Monad L1 transport:
  *  - writes: raw EIP-1559 transactions signed locally by a burner key with a
  *    LOCAL nonce counter and fixed gas limits (Monad bills gas_limit, not
  *    gas_used — padding is real money), fired without simulation.
@@ -346,7 +345,7 @@ export class Room<T = unknown, P = unknown, M = unknown> {
 
 /** Entity interpolation: buffers each player's last two presence samples and
  *  renders the roster at (now - delayMs), turning ~1-2Hz onchain broadcasts
- *  into smooth 60fps movement. Direct port of solsocket's smoothPresence. */
+ *  into smooth 60fps movement. */
 export function smoothPresence<P extends Record<string, unknown>>(
   room: { onPresence(cb: (e: PresenceEntry<P>) => void): () => void },
   render: (players: ReadonlyMap<string, PresenceEntry<P>>) => void,
