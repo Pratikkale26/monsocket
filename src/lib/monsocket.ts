@@ -40,7 +40,7 @@ export const monadTestnet = defineChain({
 /** Fixed gas limits per action — tuned tight because Monad charges the
  *  limit. Presence/messages are log-only (~26k real); setState touches
  *  storage for a dynamic bytes value. */
-const GAS = { broadcast: 48_000n, send: 55_000n, setState: 160_000n } as const;
+const GAS = { broadcast: 30_000n, send: 36_000n, setState: 160_000n } as const;
 const MAX_FEE = 150_000_000_000n; // 150 gwei (min base fee is 100)
 const PRIORITY = 2_000_000_000n;
 const POLL_MS = 250;
