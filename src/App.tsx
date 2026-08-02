@@ -41,7 +41,9 @@ type Player = { x: number; y: number; facing: number; carry: number; name: strin
 type ChatMsg = { text: string };
 type Vault = Room<VaultState, Player, ChatMsg>;
 
-let joinTarget = params.get("room"); // world name, e.g. vault-x7f3k2
+// world name, e.g. vault-x7f3k2 (empty string normalized to null — a
+// truncated link must not silently make someone a "creator")
+let joinTarget = params.get("room") || null;
 /** ?watch=1 — spectate: reading a room is free on Monad, no tx, no funds. */
 const watchMode = params.get("watch") === "1" && joinTarget !== null;
 
@@ -50,14 +52,39 @@ const watchMode = params.get("watch") === "1" && joinTarget !== null;
  * vault state for the puzzles, events for chat — every one of them a real
  * transaction on Monad, streamed back off the chain at ~300ms blocks.
  * ────────────────────────────────────────────────────────────────────────── */
-const FRESH_VAULT: VaultState = { level: 0, doors: 0, keyA: 0, keyB: 0, start: 0, run: 0 };
+const FRESH_VAULT: VaultState = {
+  level: 0,
+  doors: 0,
+  keyA: 0,
+  keyB: 0,
+  start: 0,
+  run: 0,
+  creator: "",
+};
 const sock = MonSocket.connect({ key: burnerKey, contract: CONTRACT, rpc: RPC_URL });
+
+/** Whatever another app (or a griefer) wrote into this room id must never
+ *  crash the game — only adopt states that actually look like a vault. */
+function isVaultState(s: unknown): s is VaultState {
+  if (!s || typeof s !== "object") return false;
+  const v = s as Record<string, unknown>;
+  return (
+    typeof v.level === "number" &&
+    v.level >= 0 &&
+    v.level < LEVELS.length &&
+    typeof v.doors === "number" &&
+    typeof v.keyA === "number" &&
+    typeof v.keyB === "number" &&
+    typeof v.run === "number"
+  );
+}
 
 async function goLive(): Promise<Vault> {
   const name =
     joinTarget ?? `vault-${Math.random().toString(36).slice(2, 8)}`;
   const room = await sock.joinOrCreate<VaultState, Player, ChatMsg>(name, {
-    initialState: FRESH_VAULT,
+    // If this seed wins (truly fresh room), the chain records who created it.
+    initialState: { ...FRESH_VAULT, creator: sock.address.toLowerCase() },
     readOnly: watchMode,
   });
   history.replaceState(null, "", `?room=${name}${watchMode ? "&watch=1" : ""}`);
@@ -224,11 +251,17 @@ export default function App() {
   const selfKey = sock.address.toLowerCase();
   const roleRef = useRef(0);
 
-  const partnerKey = () =>
-    [...remotes.current.keys()].find((k) => k !== selfKey) ?? null;
-  /** Structural roles, stamped per room: the creator is 0 (key A), the
-   *  joiner is 1 (key B). Stored so a refresh can't flip it — and the two
-   *  clients can never disagree. */
+  /** Prefer the onchain-stamped creator as the partner when we're the
+   *  joiner — a third wallet broadcasting into the room can't hijack the
+   *  co-op checks. */
+  const partnerKey = () => {
+    const c = vault.current.creator;
+    if (myRole() === 1 && c && c !== selfKey && remotes.current.has(c)) return c;
+    return [...remotes.current.keys()].find((k) => k !== selfKey) ?? null;
+  };
+  /** Roles come from the onchain creator stamp (creator = 0/key A, joiner
+   *  = 1/key B) — both clients derive from the same chain state, so they
+   *  can never disagree. localStorage is only a fallback for old rooms. */
   const myRole = () => roleRef.current;
 
   const refreshBalance = useCallback(async () => {
@@ -295,6 +328,7 @@ export default function App() {
     sent.current += 1;
     roomRef.current?.setState({ ...vault.current }).catch(() => {
       if (tries > 1) setTimeout(() => pushState(tries - 1), 1_500);
+      else pushFeed("⚠️", "state write failing — is the burner out of MON?");
     });
   };
 
@@ -307,6 +341,15 @@ export default function App() {
   };
 
   const applyState = (s: VaultState) => {
+    if (!isVaultState(s)) return; // foreign/garbage writes never crash us
+    // Self-healing roles: the chain's creator stamp is the referee.
+    if (!watchMode && s.creator && roomRef.current) {
+      const r = s.creator === selfKey ? 0 : 1;
+      if (roleRef.current !== r) {
+        roleRef.current = r;
+        localStorage.setItem(`monsocket-escape:role:${roomRef.current.id}`, String(r));
+      }
+    }
     const cur = vault.current;
     if (s.level > cur.level) {
       // Partner advanced the run — follow them into the next level.
@@ -356,17 +399,33 @@ export default function App() {
     try {
       const room = await goLive();
       roomRef.current = room;
+      const first = await room.getState();
       if (watchMode) {
         roleRef.current = -1; // spectator: no panel, no keypad, no key
       } else {
         const roleKey = `monsocket-escape:role:${room.id}`;
-        const stored = localStorage.getItem(roleKey);
-        roleRef.current = stored !== null ? Number(stored) : joinTarget ? 1 : 0;
+        if (first && isVaultState(first) && first.creator) {
+          // The chain says who created this room — that's the truth.
+          roleRef.current = first.creator === selfKey ? 0 : 1;
+        } else {
+          // Old room without a stamp: fall back to cache, then the URL.
+          const stored = localStorage.getItem(roleKey);
+          roleRef.current = stored !== null ? Number(stored) : joinTarget ? 1 : 0;
+        }
         localStorage.setItem(roleKey, String(roleRef.current));
       }
       room.onStateChange(({ state }) => applyState(state));
-      const first = await room.getState();
-      if (first) applyState(first);
+      if (first && isVaultState(first)) {
+        // prime the sound/feed differ so rejoining doesn't replay history
+        sndPrev.current = {
+          doors: first.doors,
+          cleared: solvedKeys(first) && !isFinal(first),
+          out: solvedKeys(first) && isFinal(first),
+          keyA: first.keyA,
+          keyB: first.keyB,
+        };
+        applyState(first);
+      }
       room.onMessage("chat", ({ player, data }) => {
         if (player !== selfKey) sfx.chat();
         chats.current.set(player, {
@@ -478,8 +537,13 @@ export default function App() {
       }
       buf.current = "";
     };
-    // The HTML keypad clicks route through the same entry path.
+    // The HTML keypad clicks route through the same entry path — with the
+    // same proximity rules (the panel can linger up to one UI tick).
     enterDigitRef.current = (d: string) => {
+      const L = lv();
+      if (L.mech.locks !== "codes") return;
+      const pad = myPad();
+      if (!near(me.x, me.y, pad.x, pad.y, 2.6)) return;
       sfx.key();
       enterDigit(d);
       setPadBuf(buf.current);

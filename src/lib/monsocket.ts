@@ -286,7 +286,8 @@ export class Room<T = unknown, P = unknown, M = unknown> {
         const args = decoded.args as Record<string, unknown>;
         if ((args.room as string)?.toLowerCase() !== this.id.toLowerCase()) continue;
         const player = (args.player as string).toLowerCase();
-        const seq = Number(log.blockNumber ?? 0n) * 1_000 + (log.logIndex ?? 0);
+        // 100k logs/block headroom keeps seq strictly monotonic across blocks
+        const seq = Number(log.blockNumber ?? 0n) * 100_000 + (log.logIndex ?? 0);
         const parse = <V,>(hex: Hex): V | null => {
           try {
             return JSON.parse(hexToString(hex)) as V;
@@ -294,22 +295,31 @@ export class Room<T = unknown, P = unknown, M = unknown> {
             return null;
           }
         };
+        // Each callback is isolated: one throwing subscriber must not eat
+        // the rest of the batch (fromBlock has already advanced past it).
+        const safely = (fn: () => void) => {
+          try {
+            fn();
+          } catch {
+            /* subscriber error — not the transport's problem */
+          }
+        };
         if (decoded.eventName === "Presence") {
           const data = parse<P>(args.data as Hex);
           if (data === null) continue;
           const entry = { player, data, seq, at: Date.now() };
-          for (const cb of this.presenceCbs) cb(entry);
+          for (const cb of this.presenceCbs) safely(() => cb(entry));
         } else if (decoded.eventName === "Message") {
           const data = parse<M>(args.data as Hex);
           if (data === null) continue;
           const name = args.name as string;
           for (const { name: want, cb } of this.messageCbs)
-            if (!want || want === name) cb({ player, name, data });
+            if (!want || want === name) safely(() => cb({ player, name, data }));
         } else if (decoded.eventName === "StateChange") {
           const state = parse<T>(args.data as Hex);
           if (state === null) continue;
           for (const cb of this.stateCbs)
-            cb({ player, seq: Number(args.seq as bigint), state });
+            safely(() => cb({ player, seq: Number(args.seq as bigint), state }));
         }
       }
     } catch {
@@ -344,7 +354,9 @@ export function smoothPresence<P extends Record<string, unknown>>(
 
   const lerp = (a: P, b: P, t: number): P => {
     const out: Record<string, unknown> = { ...b };
-    for (const k of Object.keys(b)) {
+    // Interpolate positions ONLY — lerping discrete fields (facing, carry)
+    // produces fractional nonsense mid-flight.
+    for (const k of ["x", "y"]) {
       const va = a[k];
       const vb = b[k];
       if (typeof va === "number" && typeof vb === "number") out[k] = va + (vb - va) * t;

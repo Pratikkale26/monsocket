@@ -173,6 +173,9 @@ export type VaultState = {
   keyB: number;
   start: number; // ms timestamp: this level's clock
   run: number; // ms timestamp: the whole run's clock (set once, level 0)
+  /** The creator's address, stamped onchain at seed time — the referee for
+   *  role assignment (creator = role 0/key A). localStorage is just a cache. */
+  creator?: string;
 };
 export const DOOR1 = 1; // stage 1 solved (plates / valves / bridge buttons)
 export const LOCK1 = 2; // joiner's stage-2 task (keypad k / fuel cell U / breaker b)
