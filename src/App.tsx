@@ -1032,7 +1032,6 @@ export default function App() {
 
       {phase === "funding" && (
         <div className="title">
-          <div className="title-grid">
           <div className="hero">
             <div className="kicker">monsocket presents · a two-player heist</div>
             <h2 className="game-title">THE VAULT</h2>
@@ -1143,7 +1142,6 @@ export default function App() {
             </div>
           )}
           {error && <p className="error">{error}</p>}
-          </div>
         </div>
       )}
 
