@@ -40,7 +40,13 @@ export const monadTestnet = defineChain({
 /** Fixed gas limits per action — tuned tight because Monad charges the
  *  limit. Presence/messages are log-only (~26k real); setState touches
  *  storage for a dynamic bytes value. */
-const GAS = { broadcast: 30_000n, send: 36_000n, setState: 185_000n } as const;
+const GAS = {
+  broadcast: 30_000n,
+  send: 36_000n,
+  setState: 215_000n, // first write also registers the room in the lobby index
+  stake: 95_000n,
+  refund: 75_000n,
+} as const;
 const MAX_FEE = 150_000_000_000n; // 150 gwei (min base fee is 100)
 const PRIORITY = 2_000_000_000n;
 const POLL_MS = 250;
@@ -108,12 +114,14 @@ export class MonSocket {
    *  the tx hash without waiting for inclusion — realtime writes are
    *  fire-and-forget; the log stream is the acknowledgement. */
   async write(
-    fn: "broadcast" | "send" | "setState",
+    fn: "broadcast" | "send" | "setState" | "stake" | "refund",
     args: readonly unknown[],
+    value = 0n,
   ): Promise<Hex> {
     const nonce = await this.nextNonce();
     const serialized = await this.account.signTransaction({
       to: this.contract,
+      value,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: encodeFunctionData({ abi: ABI, functionName: fn, args: args as any }),
       nonce,
@@ -135,6 +143,75 @@ export class MonSocket {
   /** Same room name → same room id, on every client. */
   roomId(name: string): Hex {
     return keccak256(toBytes(name));
+  }
+
+  /** Lobby index: the last `limit` rooms ever created, newest first. */
+  async listRoomIds(limit = 24): Promise<Hex[]> {
+    const count = Number(
+      (await this.client.readContract({
+        address: this.contract,
+        abi: ABI,
+        functionName: "roomCount",
+        args: [],
+      })) as bigint,
+    );
+    const from = Math.max(0, count - limit);
+    const ids: Hex[] = [];
+    for (let i = count - 1; i >= from; i--) {
+      ids.push(
+        (await this.client.readContract({
+          address: this.contract,
+          abi: ABI,
+          functionName: "rooms",
+          args: [BigInt(i)],
+        })) as Hex,
+      );
+    }
+    return ids;
+  }
+
+  /** Read any room's shared state without joining — no tx, no membership. */
+  async peekState<T>(roomId: Hex): Promise<T | null> {
+    const raw = (await this.client.readContract({
+      address: this.contract,
+      abi: ABI,
+      functionName: "roomState",
+      args: [roomId],
+    })) as Hex;
+    if (!raw || raw === "0x") return null;
+    try {
+      return JSON.parse(hexToString(raw)) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  /** v1 stake escrow: put MON in the room's pot (self-refund only). */
+  async stakeRoom(roomId: Hex, amountWei: bigint): Promise<Hex> {
+    return this.write("stake", [roomId], amountWei);
+  }
+
+  /** Pull YOUR stake back out — nobody else ever can. */
+  async refundStake(roomId: Hex): Promise<Hex> {
+    return this.write("refund", [roomId]);
+  }
+
+  async potOf(roomId: Hex): Promise<bigint> {
+    return (await this.client.readContract({
+      address: this.contract,
+      abi: ABI,
+      functionName: "pot",
+      args: [roomId],
+    })) as bigint;
+  }
+
+  async myStakeIn(roomId: Hex): Promise<bigint> {
+    return (await this.client.readContract({
+      address: this.contract,
+      abi: ABI,
+      functionName: "stakeOf",
+      args: [roomId, this.address],
+    })) as bigint;
   }
 
   /** The room's onchain referee: the first address that ever wrote its

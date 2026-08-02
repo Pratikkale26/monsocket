@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatEther } from "viem";
+import { formatEther, parseEther } from "viem";
 import {
   MonSocket,
   PresenceEntry,
@@ -31,7 +31,7 @@ import {
   tileUnder,
   walkable,
 } from "./vault";
-import { isMuted, setMuted, sfx } from "./sound";
+import { isMuted, setMuted, sfx, startAmbient, stopAmbient } from "./sound";
 import { loadBurnerKey } from "./wallet";
 
 const burnerKey = loadBurnerKey();
@@ -202,6 +202,10 @@ export default function App() {
   const [padBuf, setPadBuf] = useState("");
   const [copiedLink, setCopiedLink] = useState<"invite" | "watch" | null>(null);
   const [, setUiTick] = useState(0); // repaint driver for ref-backed feed
+  const [board, setBoard] = useState<{ id: string; time: number }[]>([]);
+  const [stakeOn, setStakeOn] = useState(false);
+  const [potMON, setPotMON] = useState(0);
+  const [hasStake, setHasStake] = useState(false);
 
   const copyLink = (kind: "invite" | "watch") => {
     void navigator.clipboard.writeText(
@@ -266,6 +270,36 @@ export default function App() {
   useEffect(() => {
     void refreshBalance();
   }, [refreshBalance]);
+
+  // Funding screen: poll so the START button lights up the moment MON lands.
+  useEffect(() => {
+    if (phase !== "funding") return;
+    const iv = setInterval(() => void refreshBalance(), 3_000);
+    return () => clearInterval(iv);
+  }, [phase, refreshBalance]);
+
+  // Lobby: fastest heists, read straight off the contract's room index.
+  useEffect(() => {
+    if (joinTarget) return;
+    (async () => {
+      try {
+        const ids = await sock.listRoomIds(24);
+        const plausible = (t: number) => t > 1.5e12 && t < 4e12;
+        const rows: { id: string; time: number }[] = [];
+        for (const id of ids) {
+          const st = await sock.peekState<VaultState>(id);
+          if (!st || !isVaultState(st)) continue;
+          if (!isFinal(st) || !solvedKeys(st)) continue;
+          if (!plausible(st.run) || !plausible(st.keyA)) continue;
+          const time = Math.max(st.keyA, st.keyB) - st.run;
+          if (time > 10_000) rows.push({ id, time });
+        }
+        setBoard(rows.sort((a, b) => a.time - b.time).slice(0, 5));
+      } catch {
+        /* the lobby is best-effort */
+      }
+    })();
+  }, []);
 
   const syncUi = () => {
     const v = vault.current;
@@ -405,6 +439,22 @@ export default function App() {
             ? 1
             : 0; // chain unreachable — last-resort URL guess
       }
+      if (!watchMode) {
+        if (stakeOn) {
+          sock
+            .stakeRoom(room.id, parseEther("1"))
+            .then(() => {
+              setHasStake(true);
+              pushFeed("◈", "staked 1 MON into the vault pot");
+            })
+            .catch(() => pushFeed("⚠️", "stake failed — not enough MON?"));
+        } else {
+          sock
+            .myStakeIn(room.id)
+            .then((st) => setHasStake(st > 0n))
+            .catch(() => {});
+        }
+      }
       room.onStateChange(({ state }) => applyState(state));
       if (first && isVaultState(first)) {
         // prime the sound/feed differ so rejoining doesn't replay history
@@ -456,6 +506,7 @@ export default function App() {
     const ctx = canvas.getContext("2d")!;
     // 2x backing store: crisp at any display scale (idempotent transform)
     ctx.setTransform(2, 0, 0, 2, 0, 0);
+    startAmbient(); // low vault hum for the whole run
     const keys = new Set<string>();
     let curLevel = vault.current.level;
     const me = { x: levelOf(vault.current).spawn.x, y: levelOf(vault.current).spawn.y, facing: 0 };
@@ -638,6 +689,7 @@ export default function App() {
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
 
+    let tickN = 0;
     const counters = setInterval(() => {
       setTxCount(sent.current);
       const others = [...remotes.current.keys()].filter((k) => k !== selfKey).length;
@@ -671,7 +723,13 @@ export default function App() {
         Date.now() - myKeyAt.current < levelOf(vault.current).keyWindowMs &&
         !solvedKeys(vault.current)
       )
-        sfx.tick();
+        sfx.heart();
+      if (++tickN % 10 === 0)
+        room() &&
+          void sock
+            .potOf(room()!.id)
+            .then((p) => setPotMON(Number(formatEther(p))))
+            .catch(() => {});
     }, 300);
 
     const frame = (now: number) => {
@@ -990,6 +1048,7 @@ export default function App() {
     raf = requestAnimationFrame(frame);
 
     return () => {
+      stopAmbient();
       cancelAnimationFrame(raf);
       clearInterval(counters);
       window.removeEventListener("keydown", onKeyDown);
@@ -1087,8 +1146,10 @@ export default function App() {
             <button
               aria-label={mute ? "unmute sound" : "mute sound"}
               onClick={() => {
-                setMuted(!mute);
-                setMute(!mute);
+                const next = !mute;
+                setMuted(next);
+                setMute(next);
+                if (!next && phase === "live") startAmbient();
               }}
             >
               {mute ? "🔇" : "🔊"}
@@ -1189,6 +1250,15 @@ export default function App() {
               >
                 {joinTarget ? "▶ JOIN THE HEIST" : "▶ START A HEIST"}
               </button>
+              <label className="stake-row">
+                <input
+                  type="checkbox"
+                  checked={stakeOn}
+                  onChange={(e) => setStakeOn(e.target.checked)}
+                />
+                stake 1 MON into the vault pot — testnet escrow, reclaim it
+                once you escape (self-refund only, can't be rugged)
+              </label>
               <div className="join-note">
                 {balance !== null && balance >= 1
                   ? "gas covered — grab a partner and go"
@@ -1197,6 +1267,21 @@ export default function App() {
             </div>
           )}
           <VaultPreview />
+
+          {!joinTarget && board.length > 0 && (
+            <div className="lobby-col" style={{ marginTop: 14 }}>
+              <p className="lobby-head">
+                fastest heists <span>· read off the contract's room index</span>
+              </p>
+              {board.map((b, i) => (
+                <div key={b.id} className="boardrow">
+                  <span className={`rank r${i}`}>{i + 1}</span>
+                  <span className="btime">{fmtTime(b.time)}</span>
+                  <code>{b.id.slice(0, 10)}…</code>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="levels-row">
             {LEVELS.map((lv, i) => (
@@ -1252,6 +1337,7 @@ export default function App() {
             <span className="hud-online">
               {watchMode ? `watching · ${online}/2 in` : `${online}/2 in`}
             </span>
+            {potMON > 0 && <span className="hud-pot">◈ {potMON} MON pot</span>}
             {clock && <span className="hud-clock">{clock}</span>}
           </span>
         </div>
@@ -1358,8 +1444,36 @@ export default function App() {
                 verify the escape ↗
               </a>
             </div>
+            {!watchMode && (
+              <button
+                className="primary"
+                onClick={() => {
+                  const n = roomRef.current?.name ?? "vault";
+                  const m = n.match(/^(.*)-r(\d+)$/);
+                  const next = m ? `${m[1]}-r${Number(m[2]) + 1}` : `${n}-r2`;
+                  location.href = `${location.pathname}?room=${next}`;
+                }}
+              >
+                rematch ▸ same partner, fresh vault
+              </button>
+            )}
+            {!watchMode && hasStake && (
+              <button
+                onClick={() => {
+                  roomRef.current &&
+                    sock
+                      .refundStake(roomRef.current.id)
+                      .then(() => {
+                        setHasStake(false);
+                        pushFeed("◈", "stake reclaimed from the pot");
+                      })
+                      .catch(() => pushFeed("⚠️", "reclaim failed — try again"));
+                }}
+              >
+                ◈ reclaim your stake
+              </button>
+            )}
             <button
-              className="primary"
               onClick={() => {
                 location.href = location.pathname;
               }}

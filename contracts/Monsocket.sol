@@ -21,6 +21,17 @@ contract Monsocket {
     /// First address to ever write a room's state — set once, immutable.
     /// Apps use it as the room's referee (e.g. deterministic player roles).
     mapping(bytes32 => address) public roomCreator;
+    /// Every room that ever held state, in creation order — the lobby index.
+    bytes32[] public rooms;
+    /// v1 stake escrow: skin in the game, self-custody. Each staker can
+    /// only ever pull back their OWN stake — nothing here can be rugged.
+    /// (Validated winner-takes-pot needs structured onchain game state —
+    /// that's the roadmap, not this primitive.)
+    mapping(bytes32 => mapping(address => uint256)) public stakeOf;
+    mapping(bytes32 => uint256) public pot;
+
+    event Staked(bytes32 indexed room, address indexed player, uint256 amount);
+    event Refunded(bytes32 indexed room, address indexed player, uint256 amount);
 
     function broadcast(bytes32 room, bytes calldata data) external {
         emit Presence(room, msg.sender, data);
@@ -30,8 +41,32 @@ contract Monsocket {
         emit Message(room, msg.sender, name, data);
     }
 
+    function roomCount() external view returns (uint256) {
+        return rooms.length;
+    }
+
+    function stake(bytes32 room) external payable {
+        require(msg.value > 0, "no value");
+        stakeOf[room][msg.sender] += msg.value;
+        pot[room] += msg.value;
+        emit Staked(room, msg.sender, msg.value);
+    }
+
+    function refund(bytes32 room) external {
+        uint256 amt = stakeOf[room][msg.sender];
+        require(amt > 0, "nothing staked");
+        stakeOf[room][msg.sender] = 0;
+        pot[room] -= amt;
+        (bool ok, ) = msg.sender.call{value: amt}("");
+        require(ok, "transfer failed");
+        emit Refunded(room, msg.sender, amt);
+    }
+
     function setState(bytes32 room, bytes calldata data) external {
-        if (roomCreator[room] == address(0)) roomCreator[room] = msg.sender;
+        if (roomCreator[room] == address(0)) {
+            roomCreator[room] = msg.sender;
+            rooms.push(room);
+        }
         uint64 seq = ++stateSeq[room];
         roomState[room] = data;
         emit StateChange(room, msg.sender, seq, data);

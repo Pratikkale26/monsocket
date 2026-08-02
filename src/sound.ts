@@ -20,6 +20,42 @@ function ac(): AudioContext | null {
 export function setMuted(m: boolean) {
   muted = m;
   localStorage.setItem("solsocket-escape:muted", m ? "1" : "0");
+  if (m) stopAmbient();
+}
+
+let ambient: { osc: OscillatorNode; lfo: OscillatorNode } | null = null;
+
+/** Low vault hum with a slow swell — starts on go-live, dies on mute. */
+export function startAmbient() {
+  const a = ac();
+  if (!a || ambient) return;
+  const osc = a.createOscillator();
+  const lfo = a.createOscillator();
+  const lfoGain = a.createGain();
+  const gain = a.createGain();
+  osc.type = "sine";
+  osc.frequency.value = 52;
+  lfo.frequency.value = 0.13;
+  lfoGain.gain.value = 4;
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc.frequency);
+  gain.gain.value = 0.016;
+  osc.connect(gain);
+  gain.connect(a.destination);
+  osc.start();
+  lfo.start();
+  ambient = { osc, lfo };
+}
+
+export function stopAmbient() {
+  if (!ambient) return;
+  try {
+    ambient.osc.stop();
+    ambient.lfo.stop();
+  } catch {
+    /* already stopped */
+  }
+  ambient = null;
 }
 export const isMuted = () => muted;
 
@@ -71,6 +107,11 @@ export const sfx = {
   turn: () => tone(1320, 140, { type: "triangle", gain: 0.05 }),
   /** the shrinking-window countdown tick */
   tick: () => tone(1000, 40, { type: "square", gain: 0.025 }),
+  /** heartbeat — your key is turned, the window is closing */
+  heart: () => {
+    tone(50, 100, { type: "sine", gain: 0.16 });
+    tone(46, 80, { type: "sine", gain: 0.11, delayMs: 150 });
+  },
   /** stepped in coolant — back to spawn */
   hazard: () => tone(160, 300, { type: "sawtooth", sweepTo: 40, gain: 0.07 }),
   /** chat message */

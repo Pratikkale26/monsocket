@@ -171,6 +171,27 @@ for (let i = 0; i < 5; i++) await roomA.broadcast({ x: 100 + i, y: 60, name: "te
 await until(() => seenByB.length >= before + 5, 20_000, "5 rapid broadcasts at B");
 ok(seenByB.length >= before + 5, "local nonce counter survives rapid-fire sends");
 
+// ── lobby registry + v1 stake escrow ──
+{
+  const ids = await sockA.listRoomIds(10);
+  ok(ids.some((i) => i.toLowerCase() === roomA.id.toLowerCase()), "room appears in the lobby index");
+  const peeked = await sockA.peekState<State>(roomA.id);
+  ok(peeked !== null && typeof peeked.level === "number", "peekState reads without joining");
+
+  const balBefore = await sockA.balance();
+  const stakeAmt = 10_000_000_000_000_000n; // 0.01 MON
+  const h1 = await sockA.stakeRoom(roomA.id, stakeAmt);
+  await sockA.client.waitForTransactionReceipt({ hash: h1 });
+  ok((await sockA.potOf(roomA.id)) === stakeAmt, "pot holds the stake");
+  ok((await sockA.myStakeIn(roomA.id)) === stakeAmt, "my stake recorded");
+  const h2 = await sockA.refundStake(roomA.id);
+  await sockA.client.waitForTransactionReceipt({ hash: h2 });
+  ok((await sockA.potOf(roomA.id)) === 0n, "pot empty after self-refund");
+  const balAfter = await sockA.balance();
+  // got the stake back minus two tx fees (billed gas_limit * price)
+  ok(balBefore - balAfter < 25_000_000_000_000_000n, "stake round-trip only cost gas");
+}
+
 roomA.leave();
 roomB.leave();
 roomS.leave();
