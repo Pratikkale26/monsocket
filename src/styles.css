@@ -1682,7 +1682,7 @@ button.cta:not(:disabled):active {
 .landing-hero {
   position: relative;
   min-height: min(860px, 100dvh);
-  padding: 72px clamp(18px, 4vw, 56px) 26px;
+  padding: 56px clamp(18px, 4vw, 56px) 26px;
   isolation: isolate;
   display: flex;
   flex-direction: column;
@@ -1851,13 +1851,13 @@ button.cta:not(:disabled):active {
   align-items: end;
   width: 100%;
   max-width: 1380px;
-  margin: clamp(112px, 14vh, 168px) auto 0;
+  margin: clamp(70px, 8vh, 104px) auto 0;
 }
 
 .hero-copy {
   min-width: 0;
   max-width: 920px;
-  padding-top: clamp(24px, 4vh, 50px);
+  padding-top: clamp(0px, 1.2vh, 14px);
   animation: landing-rise 520ms var(--ease-out) both;
 }
 
@@ -2778,7 +2778,7 @@ button.cta:not(:disabled):active {
   }
 
   .hero-copy {
-    padding-top: 72px;
+    padding-top: 42px;
   }
 
   .hero-shell {
