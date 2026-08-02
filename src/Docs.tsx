@@ -10,8 +10,8 @@ const apiRows = [
   ["room.broadcast(data)", "Write player presence as an event log."],
   ["room.emit(name, data)", "Write named realtime events such as chat or emotes."],
   ["room.setState(data)", "Write the canonical shared room state to storage."],
-  ["room.getState()", "Read the latest shared state from storage."],
-  ["smoothPresence(room, render)", "Interpolate sparse presence samples into smooth local motion."],
+  ["room.getState()", "Read the latest shared state directly from storage."],
+  ["smoothPresence(room, render)", "Interpolate sparse onchain presence into smooth local motion."],
 ] as const;
 
 const vaultRows = [
@@ -29,38 +29,28 @@ const docSections = [
   ["testing", "Testing"],
 ] as const;
 
+type DocSectionId = (typeof docSections)[number][0];
+
+function sectionFromHash(): DocSectionId {
+  const id = location.hash.replace("#", "");
+  return docSections.some(([sectionId]) => sectionId === id) ? (id as DocSectionId) : "overview";
+}
+
 export default function DocsPage() {
-  const [activeSection, setActiveSection] = useState<(typeof docSections)[number][0]>("overview");
+  const [activeSection, setActiveSection] = useState<DocSectionId>(sectionFromHash);
 
   useEffect(() => {
-    let ticking = false;
-    const updateActiveSection = () => {
-      ticking = false;
-      const probeY = window.innerHeight * 0.34;
-      let current: (typeof docSections)[number][0] = "overview";
-      for (let i = docSections.length - 1; i >= 0; i--) {
-        const id = docSections[i][0];
-        const section = document.getElementById(id);
-        if (section && section.getBoundingClientRect().top <= probeY) {
-          current = id;
-          break;
-        }
-      }
-      setActiveSection(current);
-    };
-    const requestUpdate = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(updateActiveSection);
-    };
-    updateActiveSection();
-    window.addEventListener("scroll", requestUpdate, { passive: true });
-    window.addEventListener("resize", requestUpdate);
-    return () => {
-      window.removeEventListener("scroll", requestUpdate);
-      window.removeEventListener("resize", requestUpdate);
-    };
+    const onHashChange = () => setActiveSection(sectionFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
+
+  const selectSection = (id: DocSectionId) => {
+    setActiveSection(id);
+    history.replaceState(null, "", `${location.pathname}#${id}`);
+  };
+
+  const activeLabel = docSections.find(([id]) => id === activeSection)?.[1] ?? "Overview";
 
   return (
     <div className="docs-page">
@@ -86,35 +76,53 @@ export default function DocsPage() {
         <aside className="docs-sidebar">
           <nav aria-label="Documentation sections">
             {docSections.map(([id, label]) => (
-              <a
+              <button
                 key={id}
-                href={`#${id}`}
+                type="button"
                 aria-current={activeSection === id ? "true" : undefined}
+                onClick={() => selectSection(id)}
               >
                 {label}
-              </a>
+              </button>
             ))}
           </nav>
         </aside>
 
-        <main className="docs-content">
-          <section className="docs-intro" id="overview">
-            <p className="docs-eyebrow">Documentation</p>
-            <h1>monsocket</h1>
-            <p className="docs-lead">
-              An open-source realtime multiplayer SDK for Monad. Build rooms,
-              presence, realtime events, shared state, and read-only spectating
-              without writing chain plumbing from scratch.
-            </p>
-          </section>
+        <main className="docs-content" key={activeSection}>
+          <p className="docs-eyebrow">{activeLabel}</p>
+          {activeSection === "overview" && (
+            <section className="docs-panel">
+              <h1>monsocket</h1>
+              <p className="docs-lead">
+                An open-source realtime multiplayer SDK for Monad. Build rooms,
+                presence, realtime events, shared state, and read-only spectating
+                without writing chain plumbing from scratch.
+              </p>
+              <div className="docs-callout-grid">
+                <article>
+                  <h3>Rooms</h3>
+                  <p>Deterministic room ids let every client find the same onchain topic.</p>
+                </article>
+                <article>
+                  <h3>Presence</h3>
+                  <p>Player movement and cursors stream as signed Monad event logs.</p>
+                </article>
+                <article>
+                  <h3>Spectating</h3>
+                  <p>Read-only viewers can watch live without sending transactions.</p>
+                </article>
+              </div>
+            </section>
+          )}
 
-          <section className="docs-section" id="quickstart">
-            <h2>Quickstart</h2>
-            <p>
-              Connect with a burner key, create a room, then use the room
-              primitives for presence, events, and shared state.
-            </p>
-            <pre className="docs-code">
+          {activeSection === "quickstart" && (
+            <section className="docs-panel">
+              <h1>Quickstart</h1>
+              <p>
+                Connect with a burner key, create a room, then use the room
+                primitives for presence, events, and shared state.
+              </p>
+              <pre className="docs-code">
 {`import { MonSocket, smoothPresence } from "./lib/monsocket";
 
 const sock = MonSocket.connect({
@@ -137,74 +145,89 @@ room.onStateChange(({ state }) => renderState(state));
 await room.setState({ doors: 1 });
 
 smoothPresence(room, renderPlayers);`}
-            </pre>
-          </section>
+              </pre>
+            </section>
+          )}
 
-          <section className="docs-section" id="api">
-            <h2>API reference</h2>
-            <div className="docs-table">
-              {apiRows.map(([name, detail]) => (
-                <div className="docs-table-row" key={name}>
-                  <code>{name}</code>
-                  <span>{detail}</span>
-                </div>
-              ))}
-            </div>
-          </section>
+          {activeSection === "api" && (
+            <section className="docs-panel">
+              <h1>API reference</h1>
+              <p>
+                The SDK surface is intentionally small: connect, open a room,
+                write presence, send events, write state, and subscribe.
+              </p>
+              <div className="docs-table">
+                {apiRows.map(([name, detail]) => (
+                  <div className="docs-table-row" key={name}>
+                    <code>{name}</code>
+                    <span>{detail}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
-          <section className="docs-section" id="architecture">
-            <h2>Architecture</h2>
-            <p>
-              monsocket is one Solidity contract plus one TypeScript client.
-              Presence and messages are emitted as logs. Shared room state is
-              stored once per room so late joiners and spectators can read the
-              latest truth immediately.
-            </p>
-            <div className="docs-callout-grid">
-              <article>
-                <h3>Write path</h3>
-                <p>
-                  The client serializes JSON, encodes the contract call, signs
-                  with a local burner key, and sends a raw Monad transaction.
-                </p>
-              </article>
-              <article>
-                <h3>Read path</h3>
-                <p>
-                  Rooms poll contract logs, decode entries by room id, and
-                  refresh storage state after log gaps.
-                </p>
-              </article>
-              <article>
-                <h3>Spectating</h3>
-                <p>
-                  Read-only clients subscribe to logs and state without writing
-                  transactions or needing a funded wallet.
-                </p>
-              </article>
-            </div>
-          </section>
+          {activeSection === "architecture" && (
+            <section className="docs-panel">
+              <h1>Architecture</h1>
+              <p>
+                monsocket is one Solidity contract plus one TypeScript client.
+                Presence and messages are logs. Shared room state is stored once
+                per room so late joiners can read the latest truth immediately.
+              </p>
+              <div className="docs-callout-grid">
+                <article>
+                  <h3>Write path</h3>
+                  <p>
+                    The client serializes JSON, encodes the contract call, signs
+                    with a local burner key, and sends a raw Monad transaction.
+                  </p>
+                </article>
+                <article>
+                  <h3>Read path</h3>
+                  <p>
+                    Rooms poll contract logs, decode entries by room id, and
+                    refresh storage state after log gaps.
+                  </p>
+                </article>
+                <article>
+                  <h3>State truth</h3>
+                  <p>
+                    <code>setState</code> writes canonical room state and
+                    increments a contract sequence number.
+                  </p>
+                </article>
+              </div>
+            </section>
+          )}
 
-          <section className="docs-section" id="vault">
-            <h2>The Vault demo</h2>
-            <p>
-              The Vault is the playable proof for monsocket: a two-player
-              onchain escape room using presence for movement, events for chat,
-              and shared state for puzzle progress.
-            </p>
-            <div className="docs-table compact">
-              {vaultRows.map(([name, detail]) => (
-                <div className="docs-table-row" key={name}>
-                  <code>{name}</code>
-                  <span>{detail}</span>
-                </div>
-              ))}
-            </div>
-          </section>
+          {activeSection === "vault" && (
+            <section className="docs-panel">
+              <h1>The Vault demo</h1>
+              <p>
+                The Vault is the playable proof for monsocket: a two-player
+                onchain escape room using presence for movement, events for chat,
+                and shared state for puzzle progress.
+              </p>
+              <div className="docs-table compact">
+                {vaultRows.map(([name, detail]) => (
+                  <div className="docs-table-row" key={name}>
+                    <code>{name}</code>
+                    <span>{detail}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
-          <section className="docs-section" id="testing">
-            <h2>Testing and deployment</h2>
-            <pre className="docs-code">
+          {activeSection === "testing" && (
+            <section className="docs-panel">
+              <h1>Testing and deployment</h1>
+              <p>
+                Run the local app, compile contract bindings, and verify both
+                the puzzle graph and the live Monad protocol behavior.
+              </p>
+              <pre className="docs-code">
 {`pnpm install
 pnpm compile
 pnpm dev
@@ -214,17 +237,18 @@ node --experimental-strip-types tests/logic.ts
 
 # live Monad testnet protocol suite
 node --experimental-strip-types tests/protocol.ts`}
-            </pre>
-            <div className="docs-meta">
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                GitHub repository
-              </a>
-              <a href={EXPLORER_URL} target="_blank" rel="noreferrer">
-                Deployed contract
-              </a>
-              <span>RPC: {RPC_URL}</span>
-            </div>
-          </section>
+              </pre>
+              <div className="docs-meta">
+                <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+                  GitHub repository
+                </a>
+                <a href={EXPLORER_URL} target="_blank" rel="noreferrer">
+                  Deployed contract
+                </a>
+                <span>RPC: {RPC_URL}</span>
+              </div>
+            </section>
+          )}
         </main>
       </div>
     </div>
