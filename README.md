@@ -39,7 +39,7 @@ wallet, no funds**, because reading the chain costs nothing.
   only* — the cheapest bytes on an EVM, no storage touched. Shared room
   state lives in one storage mapping so a late joiner reads it directly
   instead of replaying history. Deployed on Monad testnet at
-  [`0x218ac0c155637325e058aa06b88a06f0bb864858`](https://testnet.monadvision.com/address/0x218ac0c155637325e058aa06b88a06f0bb864858).
+  [`0xfabae0d448148a0ebc30a2a50a4940072babfda5`](https://testnet.monadvision.com/address/0xfabae0d448148a0ebc30a2a50a4940072babfda5).
 - **Writes**: raw EIP-1559 txs signed locally by a throwaway burner key
   with a local nonce counter and *fixed, tight gas limits* — Monad charges
   `gas_limit`, not `gas_used`, so padding is real money. Fire-and-forget;

@@ -52,15 +52,7 @@ const watchMode = params.get("watch") === "1" && joinTarget !== null;
  * vault state for the puzzles, events for chat — every one of them a real
  * transaction on Monad, streamed back off the chain at ~300ms blocks.
  * ────────────────────────────────────────────────────────────────────────── */
-const FRESH_VAULT: VaultState = {
-  level: 0,
-  doors: 0,
-  keyA: 0,
-  keyB: 0,
-  start: 0,
-  run: 0,
-  creator: "",
-};
+const FRESH_VAULT: VaultState = { level: 0, doors: 0, keyA: 0, keyB: 0, start: 0, run: 0 };
 const sock = MonSocket.connect({ key: burnerKey, contract: CONTRACT, rpc: RPC_URL });
 
 /** Whatever another app (or a griefer) wrote into this room id must never
@@ -83,8 +75,9 @@ async function goLive(): Promise<Vault> {
   const name =
     joinTarget ?? `vault-${Math.random().toString(36).slice(2, 8)}`;
   const room = await sock.joinOrCreate<VaultState, Player, ChatMsg>(name, {
-    // If this seed wins (truly fresh room), the chain records who created it.
-    initialState: { ...FRESH_VAULT, creator: sock.address.toLowerCase() },
+    // The first setState to land also stamps roomCreator onchain — the
+    // contract records the referee, immutably.
+    initialState: FRESH_VAULT,
     readOnly: watchMode,
   });
   history.replaceState(null, "", `?room=${name}${watchMode ? "&watch=1" : ""}`);
@@ -251,11 +244,11 @@ export default function App() {
   const selfKey = sock.address.toLowerCase();
   const roleRef = useRef(0);
 
-  /** Prefer the onchain-stamped creator as the partner when we're the
-   *  joiner — a third wallet broadcasting into the room can't hijack the
-   *  co-op checks. */
+  const creatorRef = useRef<string | null>(null); // onchain roomCreator
+  /** Prefer the onchain creator as the partner when we're the joiner — a
+   *  third wallet broadcasting into the room can't hijack the co-op checks. */
   const partnerKey = () => {
-    const c = vault.current.creator;
+    const c = creatorRef.current;
     if (myRole() === 1 && c && c !== selfKey && remotes.current.has(c)) return c;
     return [...remotes.current.keys()].find((k) => k !== selfKey) ?? null;
   };
@@ -342,14 +335,6 @@ export default function App() {
 
   const applyState = (s: VaultState) => {
     if (!isVaultState(s)) return; // foreign/garbage writes never crash us
-    // Self-healing roles: the chain's creator stamp is the referee.
-    if (!watchMode && s.creator && roomRef.current) {
-      const r = s.creator === selfKey ? 0 : 1;
-      if (roleRef.current !== r) {
-        roleRef.current = r;
-        localStorage.setItem(`monsocket-escape:role:${roomRef.current.id}`, String(r));
-      }
-    }
     const cur = vault.current;
     if (s.level > cur.level) {
       // Partner advanced the run — follow them into the next level.
@@ -402,17 +387,23 @@ export default function App() {
       const first = await room.getState();
       if (watchMode) {
         roleRef.current = -1; // spectator: no panel, no keypad, no key
+        creatorRef.current = await sock.creatorOf(room.id);
       } else {
-        const roleKey = `monsocket-escape:role:${room.id}`;
-        if (first && isVaultState(first) && first.creator) {
-          // The chain says who created this room — that's the truth.
-          roleRef.current = first.creator === selfKey ? 0 : 1;
-        } else {
-          // Old room without a stamp: fall back to cache, then the URL.
-          const stored = localStorage.getItem(roleKey);
-          roleRef.current = stored !== null ? Number(stored) : joinTarget ? 1 : 0;
+        // Roles come from the contract's immutable roomCreator stamp. A
+        // fresh room's seed tx lands within ~1s — poll briefly for it.
+        let creator: string | null = null;
+        for (let i = 0; i < 12 && !creator; i++) {
+          creator = await sock.creatorOf(room.id);
+          if (!creator) await new Promise((r) => setTimeout(r, 500));
         }
-        localStorage.setItem(roleKey, String(roleRef.current));
+        creatorRef.current = creator;
+        roleRef.current = creator
+          ? creator === selfKey
+            ? 0
+            : 1
+          : joinTarget
+            ? 1
+            : 0; // chain unreachable — last-resort URL guess
       }
       room.onStateChange(({ state }) => applyState(state));
       if (first && isVaultState(first)) {

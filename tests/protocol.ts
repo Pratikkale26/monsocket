@@ -91,6 +91,18 @@ const roomS = await sockS.joinOrCreate<State, Player, Chat>(roomName, { readOnly
 
 ok(roomA.id === roomB.id && roomA.id === roomS.id, "same name → same room id on all clients");
 
+// ── the immutable onchain referee: first state-writer = roomCreator ──
+{
+  let creator: string | null = null;
+  for (let i = 0; i < 12 && !creator; i++) {
+    creator = await sockA.creatorOf(roomA.id);
+    if (!creator) await new Promise((r) => setTimeout(r, 500));
+  }
+  ok(creator === sockA.address.toLowerCase(), "roomCreator = the seeder (A), immutable referee");
+  const seenByB2 = await sockB.creatorOf(roomB.id);
+  ok(seenByB2 === creator, "both clients read the same creator");
+}
+
 // ── presence both directions + latency ──
 const seenByB: Player[] = [];
 const seenByA: Player[] = [];

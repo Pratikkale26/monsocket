@@ -40,7 +40,7 @@ export const monadTestnet = defineChain({
 /** Fixed gas limits per action — tuned tight because Monad charges the
  *  limit. Presence/messages are log-only (~26k real); setState touches
  *  storage for a dynamic bytes value. */
-const GAS = { broadcast: 30_000n, send: 36_000n, setState: 160_000n } as const;
+const GAS = { broadcast: 30_000n, send: 36_000n, setState: 185_000n } as const;
 const MAX_FEE = 150_000_000_000n; // 150 gwei (min base fee is 100)
 const PRIORITY = 2_000_000_000n;
 const POLL_MS = 250;
@@ -135,6 +135,20 @@ export class MonSocket {
   /** Same room name → same room id, on every client. */
   roomId(name: string): Hex {
     return keccak256(toBytes(name));
+  }
+
+  /** The room's onchain referee: the first address that ever wrote its
+   *  state. Immutable — every client reads the same answer forever. */
+  async creatorOf(roomId: Hex): Promise<string | null> {
+    const a = (await this.client.readContract({
+      address: this.contract,
+      abi: ABI,
+      functionName: "roomCreator",
+      args: [roomId],
+    })) as Hex;
+    return a && a !== "0x0000000000000000000000000000000000000000"
+      ? a.toLowerCase()
+      : null;
   }
 
   /** Join is free — there is no join transaction. Pass `initialState` to

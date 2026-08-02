@@ -18,6 +18,9 @@ contract Monsocket {
 
     mapping(bytes32 => bytes) public roomState;
     mapping(bytes32 => uint64) public stateSeq;
+    /// First address to ever write a room's state — set once, immutable.
+    /// Apps use it as the room's referee (e.g. deterministic player roles).
+    mapping(bytes32 => address) public roomCreator;
 
     function broadcast(bytes32 room, bytes calldata data) external {
         emit Presence(room, msg.sender, data);
@@ -28,6 +31,7 @@ contract Monsocket {
     }
 
     function setState(bytes32 room, bytes calldata data) external {
+        if (roomCreator[room] == address(0)) roomCreator[room] = msg.sender;
         uint64 seq = ++stateSeq[room];
         roomState[room] = data;
         emit StateChange(room, msg.sender, seq, data);
