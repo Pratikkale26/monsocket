@@ -83,6 +83,8 @@ function VaultPreview() {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const ctx = ref.current!.getContext("2d")!;
+    // 2x backing store: crisp at any display scale (idempotent transform)
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
     let raf = 0;
     let lvIdx = 0;
     let switchAt = Date.now() + 4_000;
@@ -138,7 +140,13 @@ function VaultPreview() {
   return (
     <div className="preview-wrap">
       <span className="preview-chip">LIVE WORLD PREVIEW</span>
-      <canvas ref={ref} width={WIDTH} height={HEIGHT} className="preview" />
+      <canvas
+        ref={ref}
+        width={WIDTH * 2}
+        height={HEIGHT * 2}
+        className="preview"
+        aria-label="Live preview of the vault chambers"
+      />
     </div>
   );
 }
@@ -172,6 +180,16 @@ export default function App() {
   } | null>(null);
   const [keypadOn, setKeypadOn] = useState(false);
   const [padBuf, setPadBuf] = useState("");
+  const [copiedLink, setCopiedLink] = useState<"invite" | "watch" | null>(null);
+  const [, setUiTick] = useState(0); // repaint driver for ref-backed feed
+
+  const copyLink = (kind: "invite" | "watch") => {
+    void navigator.clipboard.writeText(
+      kind === "watch" ? `${location.href}&watch=1` : location.href,
+    );
+    setCopiedLink(kind);
+    setTimeout(() => setCopiedLink(null), 1_500);
+  };
 
   const roomRef = useRef<Vault | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -386,6 +404,8 @@ export default function App() {
     if (phase !== "live") return;
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
+    // 2x backing store: crisp at any display scale (idempotent transform)
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
     const keys = new Set<string>();
     let curLevel = vault.current.level;
     const me = { x: levelOf(vault.current).spawn.x, y: levelOf(vault.current).spawn.y, facing: 0 };
@@ -580,6 +600,7 @@ export default function App() {
           near(mePos.current.x, mePos.current.y, padPos.x, padPos.y, 2.2),
       );
       setPadBuf(buf.current);
+      setUiTick((t) => t + 1);
       const v = vault.current;
       if (v.run > 0)
         setClock(
@@ -997,15 +1018,13 @@ export default function App() {
         {phase === "live" && room && (
           <div className="status">
             <span className="dot live" /> vault <code>{room.name}</code>
-            <button onClick={() => navigator.clipboard.writeText(location.href)}>
-              copy invite link
+            <button onClick={() => copyLink("invite")}>
+              {copiedLink === "invite" ? "copied ✓" : "copy invite link"}
             </button>
             <span>{watchMode ? `watching · ${online}/2 inside` : `${online}/2 inside`}</span>
             {!watchMode && (
-              <button
-                onClick={() => navigator.clipboard.writeText(`${location.href}&watch=1`)}
-              >
-                copy watch link
+              <button onClick={() => copyLink("watch")}>
+                {copiedLink === "watch" ? "copied ✓" : "copy watch link"}
               </button>
             )}
             <span className="metric">
@@ -1016,6 +1035,7 @@ export default function App() {
             {echo !== null && <span className="metric">{echo}ms onchain echo</span>}
             <button onClick={() => setShowHint(true)}>how to play</button>
             <button
+              aria-label={mute ? "unmute sound" : "mute sound"}
               onClick={() => {
                 setMuted(!mute);
                 setMute(!mute);
@@ -1089,7 +1109,8 @@ export default function App() {
                 </label>
                 <div className="wallet-field">
                   burner wallet
-                  <div
+                  <button
+                    type="button"
                     className={`wallet-chip${balance !== null && balance >= 1 ? " ok" : ""}`}
                     title="click to copy the full address"
                     onClick={() => {
@@ -1110,7 +1131,7 @@ export default function App() {
                     <span className={`copy-ic${copied ? " done" : ""}`}>
                       {copied ? "✓" : "⧉ copy"}
                     </span>
-                  </div>
+                  </button>
                 </div>
                 {!(balance !== null && balance >= 1) && (
                   <a
@@ -1118,12 +1139,15 @@ export default function App() {
                     href="https://faucet.monad.xyz"
                     target="_blank"
                     rel="noreferrer"
-                    style={{ textDecoration: "none" }}
                   >
-                    <button className="fund-btn">get testnet MON ↗</button>
+                    get testnet MON ↗
                   </a>
                 )}
-                <button className="fund-btn" onClick={() => void refreshBalance()}>
+                <button
+                  className="fund-btn"
+                  aria-label="refresh balance"
+                  onClick={() => void refreshBalance()}
+                >
                   ↻
                 </button>
               </div>
@@ -1153,16 +1177,36 @@ export default function App() {
         </div>
       )}
 
-      {phase === "error" && <div className="panel error">{error}</div>}
+      {phase === "error" && (
+        <div className="panel">
+          <p className="error" style={{ margin: "0 0 8px" }}>
+            couldn't reach the vault — the testnet RPC may be busy.
+          </p>
+          <details style={{ marginBottom: 10 }}>
+            <summary style={{ cursor: "pointer", fontSize: 12 }}>details</summary>
+            <code>{error}</code>
+          </details>
+          <button className="primary" onClick={() => location.reload()}>
+            try again
+          </button>
+        </div>
+      )}
 
       <div className="game-wrap" style={{ display: phase === "live" ? "grid" : "none" }}>
         <div>
         <div className="stage">
-        <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} />
+        <canvas
+          ref={canvasRef}
+          width={WIDTH * 2}
+          height={HEIGHT * 2}
+          aria-label="The Vault — live game view"
+        />
         {phase === "live" && watchMode && (
           <>
             <div className="scanlines" />
-            <span className="live-chip">● LIVE FEED</span>
+            <span className="live-chip">
+              <b>●</b> LIVE FEED
+            </span>
           </>
         )}
         {phase === "live" && levelCard && Date.now() < levelCard.until && (
@@ -1176,14 +1220,15 @@ export default function App() {
           <div className="keypad">
             <div className="keypad-buf">{padBuf.padEnd(4, "·").split("").join(" ")}</div>
             <div className="keypad-grid">
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0"].map((k) => (
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "⌫"].map((k) => (
                 <button
                   key={k}
                   className="keypad-key"
+                  aria-label={k === "⌫" ? "delete last digit" : `digit ${k}`}
                   onClick={() => {
                     if (k === "⌫") {
-                      buf.current = "";
-                      setPadBuf("");
+                      buf.current = buf.current.slice(0, -1);
+                      setPadBuf(buf.current);
                     } else {
                       enterDigitRef.current?.(k);
                     }
@@ -1193,7 +1238,6 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <div className="keypad-note">type the 4 digits your partner reads out</div>
           </div>
         )}
         {phase === "live" && !watchMode && online < 2 && level === 0 && !(doors & DOOR1) && !out && (

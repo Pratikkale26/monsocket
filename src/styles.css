@@ -49,10 +49,6 @@ body {
   flex-direction: column;
 }
 
-.footer {
-  margin-top: auto;
-}
-
 header h1 {
   font-size: 21px;
   margin: 0 0 6px;
@@ -213,14 +209,19 @@ button.primary:hover {
 }
 
 button.primary:disabled {
-  opacity: 0.4;
+  opacity: 1;
   cursor: not-allowed;
   filter: none;
+  background: #3a3160;
+  border-color: #3a3160;
+  color: #9a93b8;
+  box-shadow: none;
 }
 
 /* ── game layout: canvas + tx feed ── */
 
 .game-wrap {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) 256px;
   gap: 16px;
   margin-top: 14px;
@@ -231,9 +232,8 @@ button.primary:disabled {
 .stage {
   position: relative;
   padding: 10px;
-  border-width: 2px;
   background: linear-gradient(180deg, #1e1834, #131021);
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 18px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
@@ -258,11 +258,12 @@ button.primary:disabled {
   padding: 14px;
   font-size: 12.5px;
   min-height: 200px;
-  max-height: 420px;
+  max-height: 460px;
   display: flex;
   flex-direction: column;
   gap: 7px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .feed-head {
@@ -348,7 +349,7 @@ button.primary:disabled {
   line-height: 1.9;
   cursor: pointer;
   animation: hint-in 0.25s ease-out;
-  white-space: nowrap;
+  max-width: min(94%, 580px);
   z-index: 3;
 }
 
@@ -403,6 +404,7 @@ button.primary:disabled {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
+  max-width: 92%;
   text-align: center;
   background: rgba(15, 13, 23, 0.95);
   backdrop-filter: blur(8px);
@@ -440,15 +442,14 @@ button.primary:disabled {
 /* chamber title card between levels */
 .lvlcard {
   position: absolute;
-  inset: 0;
-  border-radius: 18px;
+  inset: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  background: rgba(10, 8, 16, 0.88);
-  border-radius: 14px;
+  background: rgba(10, 8, 16, 0.9);
+  border-radius: 12px;
   z-index: 5;
   animation: lvlcard-in 0.35s ease-out;
   pointer-events: none;
@@ -488,8 +489,8 @@ button.primary:disabled {
 /* spectator: security-feed treatment */
 .scanlines {
   position: absolute;
-  inset: 0;
-  border-radius: 18px;
+  inset: 10px;
+  border-radius: 12px;
   pointer-events: none;
   z-index: 2;
   background: repeating-linear-gradient(
@@ -503,8 +504,8 @@ button.primary:disabled {
 
 .live-chip {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 20px;
+  left: 20px;
   z-index: 3;
   font-size: 10px;
   letter-spacing: 0.18em;
@@ -513,8 +514,12 @@ button.primary:disabled {
   border-radius: 6px;
   padding: 3px 8px;
   font-family: ui-monospace, monospace;
-  animation: pulse 1.6s infinite;
   pointer-events: none;
+}
+
+.live-chip b {
+  animation: pulse 1.6s infinite;
+  font-weight: normal;
 }
 
 /* ── under-canvas rows ── */
@@ -591,16 +596,9 @@ button.primary:disabled {
   pointer-events: none;
 }
 
-.kicker {
-  font-size: 11px;
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 .game-title {
   font-family: var(--font-px);
-  font-size: 46px;
+  font-size: clamp(26px, 7vw, 46px);
   letter-spacing: 0.06em;
   margin: 18px 0 18px;
   display: inline-block;
@@ -655,9 +653,8 @@ button.primary:disabled {
   margin-top: 22px;
   border-radius: 20px;
   padding: 12px;
-  border-width: 2px;
   background: linear-gradient(180deg, #1c1631, #131020);
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   box-shadow: 0 24px 60px -35px rgba(131, 110, 249, 0.55);
 }
 
@@ -707,7 +704,6 @@ button.primary:disabled {
   border: 1px solid var(--line-soft);
   border-radius: 999px;
   padding: 6px 14px;
-  border-width: 2px;
 }
 
 .levels-row {
@@ -728,8 +724,8 @@ button.primary:disabled {
 }
 
 .level-card:hover {
-  transform: translateY(-4px) rotate(-0.6deg);
-  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.35), 0 18px 40px -18px rgba(131, 110, 249, 0.55);
+  transform: translateY(-3px);
+  box-shadow: 0 9px 0 rgba(0, 0, 0, 0.35), 0 18px 40px -18px rgba(131, 110, 249, 0.55);
 }
 
 .level-card.lv0 {
@@ -830,6 +826,8 @@ button.primary:disabled {
   display: flex;
   align-items: center;
   gap: 9px;
+  font-family: inherit;
+  text-align: left;
   background: var(--panel-2);
   border: 2px solid #352c55;
   border-radius: 10px;
@@ -877,6 +875,22 @@ button.primary:disabled {
   padding: 9px 12px;
 }
 
+a.fund-btn {
+  display: inline-block;
+  background: #221c38;
+  border: 1px solid #352c55;
+  border-radius: 9px;
+  font-size: 12px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+a.fund-btn:hover {
+  background: #2b2347;
+  border-color: #46396f;
+}
+
 button.cta {
   font-family: var(--font-px);
   font-size: 14px;
@@ -912,6 +926,7 @@ button.cta:not(:disabled):active {
 /* ── footer ── */
 
 .footer {
+  margin-top: auto;
   display: flex;
   gap: 14px;
   justify-content: center;
@@ -1020,5 +1035,23 @@ button.cta:not(:disabled):active {
 
   .levels-row {
     grid-template-columns: 1fr;
+  }
+
+  .keypad {
+    position: static;
+    margin-top: 10px;
+    flex-direction: row;
+    justify-content: center;
+    flex-wrap: wrap;
+    box-shadow: none;
+  }
+
+  .keypad-grid {
+    grid-template-columns: repeat(6, 44px);
+  }
+
+  .keypad-key {
+    width: 44px;
+    height: 42px;
   }
 }
