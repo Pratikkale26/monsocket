@@ -4,6 +4,9 @@
   "description": "Socket.io for Monad — realtime multiplayer rooms where every action is an onchain transaction",
   "license": "MIT",
   "type": "module",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
