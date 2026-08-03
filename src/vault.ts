@@ -298,9 +298,28 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
     (mech.latch === "gate" && (o.meTile === "L" || o.partnerTile === "L"));
   const on = (t: string) => o.meTile === t || o.partnerTile === t;
 
-  const floor = (x: number, y: number, v: number) => {
-    ctx.fillStyle = ["#232427", "#26272b", "#212225"][v];
+  const floor = (x: number, y: number, v: number, c = 0, r = 0) => {
+    ctx.fillStyle = ["#181e19", "#1a211c", "#161c17"][v];
     ctx.fillRect(x, y, TILE, TILE);
+    // bevel: light catches the top-left of every tile
+    ctx.fillStyle = "rgba(236, 231, 219, 0.028)";
+    ctx.fillRect(x, y, TILE, 1);
+    ctx.fillRect(x, y, 1, TILE);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.fillRect(x, y + TILE - 1, TILE, 1);
+    // walls cast a soft shadow onto the floor below them
+    if (lv.tile(c, r - 1) === "#") {
+      const sh = ctx.createLinearGradient(0, y, 0, y + 9);
+      sh.addColorStop(0, "rgba(0, 0, 0, 0.35)");
+      sh.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = sh;
+      ctx.fillRect(x, y, TILE, 9);
+    }
+    // sparse seeded wear marks so the floor isn't sterile
+    if ((c * 31 + r * 17) % 23 === 0) {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
+      ctx.fillRect(x + ((c * 7) % 14) + 4, y + ((r * 11) % 14) + 4, 4, 1.5);
+    }
   };
 
   for (let r = 0; r < ROWS; r++) {
@@ -311,10 +330,27 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
       const ch = lv.tile(c, r);
       switch (ch) {
         case "#": {
-          ctx.fillStyle = ["#3c3b42", "#413f47", "#38373e"][v];
+          const faceBelow = lv.tile(c, r + 1) !== "#";
+          ctx.fillStyle = ["#2b332c", "#2e372f", "#293128"][v];
           ctx.fillRect(x, y, TILE, TILE);
-          ctx.fillStyle = "#302f35";
-          ctx.fillRect(x, y + TILE - 4, TILE, 4);
+          ctx.fillStyle = "rgba(236, 231, 219, 0.05)";
+          ctx.fillRect(x, y, TILE, 1);
+          if (faceBelow) {
+            // this wall shows its front face to the room
+            ctx.fillStyle = "#1c221b";
+            ctx.fillRect(x, y + TILE - 9, TILE, 9);
+            ctx.fillStyle = "rgba(212, 175, 90, 0.18)";
+            ctx.fillRect(x, y + TILE - 9, TILE, 1);
+            ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+            ctx.fillRect(x, y + TILE - 2, TILE, 2);
+          } else {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.14)";
+            ctx.fillRect(x, y + TILE - 3, TILE, 3);
+          }
+          if ((c + r) % 2 === 0) {
+            ctx.fillStyle = "rgba(212, 175, 90, 0.15)";
+            ctx.fillRect(x + TILE - 4, y + 3, 2, 2);
+          }
           break;
         }
         case "1":
@@ -327,15 +363,19 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
                 ? (o.doors & LOCK1) !== 0 && (o.doors & LOCK2) !== 0
                 : gateOpen;
           if (open) {
-            floor(x, y, v);
-            ctx.fillStyle = "rgba(74,222,128,0.25)";
+            floor(x, y, v, c, r);
+            ctx.fillStyle = "rgba(88, 201, 139, 0.3)";
             ctx.fillRect(x, y, 3, TILE);
             ctx.fillRect(x + TILE - 3, y, 3, TILE);
           } else {
-            ctx.fillStyle = "#4a4f63";
+            ctx.fillStyle = "#20261f";
             ctx.fillRect(x, y, TILE, TILE);
-            ctx.fillStyle = "#f87171";
-            for (let i = 0; i < 3; i++) ctx.fillRect(x + 3, y + 4 + i * 7, TILE - 6, 3);
+            ctx.fillStyle = "#39443a";
+            ctx.fillRect(x + 1, y, TILE - 2, TILE);
+            ctx.fillStyle = "#12160f";
+            for (let i = 0; i < 3; i++) ctx.fillRect(x + 4 + i * 7, y + 2, 3, TILE - 4);
+            ctx.fillStyle = "rgba(212, 175, 90, 0.6)";
+            ctx.fillRect(x + 2, y + TILE / 2 - 1, TILE - 4, 2);
           }
           break;
         }
@@ -344,26 +384,39 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
           // lever gates — open only while the matching lever is held
           const open = ch === "5" ? o.heldI : o.heldJ;
           if (open) {
-            floor(x, y, v);
-            ctx.fillStyle = "rgba(250,204,21,0.3)";
+            floor(x, y, v, c, r);
+            ctx.fillStyle = "rgba(233, 200, 119, 0.35)";
             ctx.fillRect(x, y, 3, TILE);
             ctx.fillRect(x + TILE - 3, y, 3, TILE);
           } else {
-            ctx.fillStyle = "#4a4f63";
+            ctx.fillStyle = "#20261f";
             ctx.fillRect(x, y, TILE, TILE);
-            ctx.fillStyle = "#facc15";
-            for (let i = 0; i < 3; i++) ctx.fillRect(x + 3, y + 4 + i * 7, TILE - 6, 3);
+            ctx.fillStyle = "#39443a";
+            ctx.fillRect(x + 1, y, TILE - 2, TILE);
+            ctx.fillStyle = "#e9c877";
+            for (let i = 0; i < 3; i++) ctx.fillRect(x + 4 + i * 7, y + 2, 3, TILE - 4);
           }
           break;
         }
         case "4": {
-          ctx.fillStyle = o.frozen ? "#141520" : "#8a6d1f";
+          ctx.fillStyle = "#0f130e";
           ctx.fillRect(x, y, TILE, TILE);
           if (!o.frozen) {
-            ctx.strokeStyle = "#d4a017";
+            const gl = ctx.createRadialGradient(
+              x + TILE / 2, y + TILE / 2, 2,
+              x + TILE / 2, y + TILE / 2, 15,
+            );
+            gl.addColorStop(0, "rgba(233, 200, 119, 0.5)");
+            gl.addColorStop(1, "rgba(233, 200, 119, 0)");
+            ctx.fillStyle = gl;
+            ctx.fillRect(x, y, TILE, TILE);
+            ctx.strokeStyle = "#d4af5a";
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.arc(x + TILE / 2, y + TILE / 2, 7, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(x + TILE / 2, y + TILE / 2, 2.5, 0, Math.PI * 2);
             ctx.stroke();
           }
           break;
@@ -396,7 +449,7 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
         }
         case "x":
         case "y": {
-          floor(x, y, v);
+          floor(x, y, v, c, r);
           // Cracked glass: x is A's crossing (only the JOINER sees it),
           // y is B's (only the CREATOR sees it). Spectators see both.
           const visible =
@@ -415,7 +468,7 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
           break;
         }
         case "m": {
-          floor(x, y, v);
+          floor(x, y, v, c, r);
           if (o.pulseOn) {
             // open: just the emitter studs
             ctx.fillStyle = "#22d3ee";
@@ -435,7 +488,7 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
           break;
         }
         default:
-          floor(x, y, v);
+          floor(x, y, v, c, r);
       }
     }
   }
@@ -445,22 +498,8 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
   // Guide rings: softly pulse around the CURRENT stage's puzzle elements,
   // so the room itself tells you where the action is.
   if (!o.frozen) {
-    const stage =
-      !(o.doors & DOOR1)
-        ? 0
-        : !(o.doors & LOCK1) || !(o.doors & LOCK2)
-          ? 1
-          : !(o.doors & LATCH)
-            ? 2
-            : 3;
-    const ACTIVE = [
-      MECH_CHARS[mech.door1],
-      MECH_CHARS[mech.locks],
-      MECH_CHARS[mech.latch],
-      "AB",
-    ][stage];
     const pulse01 = 0.5 + Math.sin(o.t / 320) * 0.5;
-    for (const ch of [...ACTIVE]) {
+    for (const ch of [...activeChars(lv, o.doors)]) {
       const p = lv.pos[ch];
       if (!p) continue;
       ctx.beginPath();
@@ -662,6 +701,73 @@ export function drawVault(ctx: CanvasRenderingContext2D, lv: Level, o: DrawOpts)
   station(lv.pos.B, o.keyB, "B");
 }
 
+/** The puzzle chars the players should be working on right now. */
+export function activeChars(lv: Level, doors: number): string {
+  const stage =
+    !(doors & DOOR1)
+      ? 0
+      : !(doors & LOCK1) || !(doors & LOCK2)
+        ? 1
+        : !(doors & LATCH)
+          ? 2
+          : 3;
+  return [
+    MECH_CHARS[lv.mech.door1],
+    MECH_CHARS[lv.mech.locks],
+    MECH_CHARS[lv.mech.latch],
+    "AB",
+  ][stage];
+}
+
+/** Fixed light sources for the ambient pass: the active puzzle elements
+ *  glow softly, and the exit door glows gold. */
+export function sceneLights(
+  lv: Level,
+  doors: number,
+): { x: number; y: number; r: number }[] {
+  const out: { x: number; y: number; r: number }[] = [];
+  for (const ch of [...activeChars(lv, doors)]) {
+    const p = lv.pos[ch];
+    if (p) out.push({ x: p.x, y: p.y, r: 66 });
+  }
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (lv.tile(c, r) === "4")
+        out.push({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2, r: 84 });
+  return out;
+}
+
+let lightLayer: HTMLCanvasElement | null = null;
+
+/** Ambient darkness with pooled light — the vault is dark; players carry
+ *  the light. Drawn over the finished scene from an offscreen layer so
+ *  the hole-punching never erases the world underneath. */
+export function drawAmbient(
+  ctx: CanvasRenderingContext2D,
+  lights: { x: number; y: number; r: number }[],
+) {
+  if (typeof document === "undefined") return;
+  if (!lightLayer) {
+    lightLayer = document.createElement("canvas");
+    lightLayer.width = WIDTH;
+    lightLayer.height = HEIGHT;
+  }
+  const lc = lightLayer.getContext("2d")!;
+  lc.globalCompositeOperation = "source-over";
+  lc.clearRect(0, 0, WIDTH, HEIGHT);
+  lc.fillStyle = "rgba(3, 6, 4, 0.46)";
+  lc.fillRect(0, 0, WIDTH, HEIGHT);
+  lc.globalCompositeOperation = "destination-out";
+  for (const l of lights) {
+    const g = lc.createRadialGradient(l.x, l.y, l.r * 0.12, l.x, l.y, l.r);
+    g.addColorStop(0, "rgba(0, 0, 0, 0.95)");
+    g.addColorStop(1, "rgba(0, 0, 0, 0)");
+    lc.fillStyle = g;
+    lc.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
+  }
+  ctx.drawImage(lightLayer, 0, 0);
+}
+
 export const hueOf = (key: string) =>
   [...key].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 0);
 
@@ -687,8 +793,10 @@ export function drawPlayer(
   ctx.fill();
   ctx.beginPath();
   ctx.roundRect(x - 9, yb - 12, 18, 22, 6);
-  ctx.fillStyle = `hsl(${hue} 65% ${opts.self ? 62 : 52}%)`;
+  ctx.fillStyle = `hsl(${hue} 46% ${opts.self ? 60 : 50}%)`;
   ctx.fill();
+  ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+  ctx.fillRect(x - 9, yb + 2, 18, 2.5);
   ctx.lineWidth = 2;
   ctx.strokeStyle = opts.self ? "#ffffff" : `hsl(${hue} 50% 30%)`;
   ctx.stroke();
