@@ -203,6 +203,7 @@ export default function App() {
   const [copiedLink, setCopiedLink] = useState<"invite" | "watch" | null>(null);
   const [, setUiTick] = useState(0); // repaint driver for ref-backed feed
   const [board, setBoard] = useState<{ id: string; time: number }[]>([]);
+  const [opening, setOpening] = useState(false); // vault-door transition
   const [stakeOn, setStakeOn] = useState(false);
   const [potMON, setPotMON] = useState(0);
   const [hasStake, setHasStake] = useState(false);
@@ -410,6 +411,13 @@ export default function App() {
     buf.current = "";
     myKeyAt.current = 0;
     writeState({ level: v.level + 1, doors: 0, keyA: 0, keyB: 0, start: 0, run: v.run });
+  };
+
+  /** Spin the handle, swing the door, then actually enter. */
+  const launch = () => {
+    if (opening) return;
+    setOpening(true);
+    setTimeout(() => void enter(), 750);
   };
 
   const enter = async () => {
@@ -1162,18 +1170,38 @@ export default function App() {
       </header>
 
       {phase === "funding" && (
-        <div className="title">
+        <div className={`title${opening ? " opening" : ""}`}>
           <div className="hero">
-            <div className="kicker">monsocket presents · a two-player heist</div>
-            <h2 className="game-title">THE VAULT</h2>
-            <div className="hero-sub">
-              nine puzzles that are impossible alone — and every step, chat
-              line, and key turn is a real transaction on Monad
-            </div>
-            <div className="hero-tags">
-              <span>⚡ 300ms Monad blocks</span>
-              <span>🧾 every action a real tx</span>
-              <span>📺 spectating is free — no wallet</span>
+            <div className="hero-split">
+              <div className="hero-copy">
+                <div className="kicker">monsocket presents</div>
+                <h2 className="game-title">
+                  The<br />Vault
+                </h2>
+                <div className="hero-sub">
+                  A two-player heist on Monad. Nine puzzles that are impossible
+                  alone — and every step, chat line, and key turn is a real
+                  transaction on the chain.
+                </div>
+                <div className="hero-tags">
+                  <span>300ms Monad blocks</span>
+                  <span>every action a real tx</span>
+                  <span>spectating is free</span>
+                </div>
+              </div>
+              <div className="hero-door" aria-hidden="true">
+                <div className="vault-door">
+                  <div className="vd-bolts" />
+                  <div className="vd-ring" />
+                  <div className="vd-handle">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="vd-hub" />
+                </div>
+                <div className="vd-shadow" />
+              </div>
             </div>
           </div>
 
@@ -1184,8 +1212,8 @@ export default function App() {
                 straight off Monad. There is no join transaction: reading the
                 chain is free, so watching needs no wallet and no funds.
               </p>
-              <button className="primary cta" onClick={enter}>
-                ▶ WATCH THE HEIST LIVE
+              <button className="primary cta" onClick={launch}>
+                {opening ? "opening the vault…" : "Watch the heist live"}
               </button>
             </div>
           ) : (
@@ -1246,9 +1274,13 @@ export default function App() {
               <button
                 className="primary cta"
                 disabled={balance !== null && balance < 1}
-                onClick={enter}
+                onClick={launch}
               >
-                {joinTarget ? "▶ JOIN THE HEIST" : "▶ START A HEIST"}
+                {opening
+                  ? "opening the vault…"
+                  : joinTarget
+                    ? "Join the heist"
+                    : "Start the heist"}
               </button>
               <label className="stake-row">
                 <input
@@ -1287,8 +1319,8 @@ export default function App() {
             {LEVELS.map((lv, i) => (
               <div key={lv.name} className={`level-card lv${i}`}>
                 <div className="lv-top">
-                  <span className="lv-num">LEVEL {i + 1}</span>
-                  <span className="lv-ico">{["🔐", "☢️", "🌀"][i]}</span>
+                  <span className="lv-num">Chamber {"I II III".split(" ")[i]}</span>
+                  <span className="lv-ico">{"①②③"[i]}</span>
                 </div>
                 <div className="lv-name">{lv.name}</div>
                 <div className="lv-puzzles">
