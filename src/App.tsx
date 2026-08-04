@@ -1316,20 +1316,6 @@ export default function App() {
             ))}
           </div>
 
-          <div className="arcade-row">
-            <a className="arcade-card" href="?game=standoff">
-              <span className="arcade-num">02</span>
-              <span>
-                <strong>The Standoff</strong>
-                <span className="arcade-sub">
-                  A turn-based duel with hidden moves — commit a hash onchain, then
-                  reveal. Same engine, different game.
-                </span>
-              </span>
-              <span className="arcade-go">PLAY →</span>
-            </a>
-          </div>
-
           {!joinTarget && board.length > 0 && (
             <div className="lobby-col" style={{ marginTop: 14 }}>
               <p className="lobby-head">

@@ -55,6 +55,20 @@ messages independently.
 ## Gas limits (billed on Monad!)
 
 Monad charges `gas_limit`, not `gas_used` — the client pins measured
-limits: `broadcast` 30k · `send` 36k · `setState` 215k · `stake` 95k ·
+limits: `broadcast` 30k · `send` 36k · `setState` 120k · `stake` 95k ·
 `refund` 75k. At the 100 gwei base fee floor a presence broadcast costs
 ~0.003 MON.
+
+`setState` carries **two** limits, because creating a room and updating one
+are different costs. The write that brings a room into existence pays three
+cold storage slots plus a push into the lobby registry, and it scales per 32
+bytes of payload — measured against the live contract at 210k for a 57-byte
+seed and 239k at 81 bytes. Updating an existing room costs ~87k.
+
+So `Room.setState()` uses the 320k cold limit until it has observed the
+room's state to exist, then drops to 120k; `joinOrCreate`'s seeding write
+always uses the cold limit. `write()` takes an optional gas override.
+
+On a chain that bills the limit, **measure per code path, not per function
+name**: one shared 215k number left room creation with 2% of headroom while
+overcharging every ordinary move by ~2.5x.

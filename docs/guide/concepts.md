@@ -32,9 +32,15 @@ program-side validation layer) — monsocket is deliberately game-agnostic.
   |---|---|---|
   | `broadcast` (presence) | 30,000 | 0.003 MON |
   | `send` (message) | 36,000 | 0.0036 MON |
-  | `setState` | 215,000 | 0.0215 MON |
+  | `setState` (update) | 120,000 | 0.012 MON |
+  | `setState` (create room) | 320,000 | 0.032 MON |
 
   A full game of The Vault measures ~2 MON ≈ **3–4¢ per player**.
+
+  The two `setState` limits matter: a room-creating write pays cold storage
+  slots plus a registry push and scales per 32 bytes of payload, while an
+  update to an existing room needs ~87k. Collapsing them into one number
+  leaves creation with almost no headroom *and* overcharges every move.
 - **Writes are fire-and-forget** raw EIP-1559 transactions signed by a
   local burner key with a **local nonce counter** (serialized at startup
   so racing writes can never share a nonce). The log stream is the ack.
