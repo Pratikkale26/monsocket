@@ -44,11 +44,17 @@ const GAS = {
   broadcast: 30_000n,
   send: 36_000n,
   // Writing a room's state for the FIRST time is a different animal from
-  // updating it: it pays for three cold storage slots (state, seq, creator)
-  // plus a push into the lobby registry. Measured on testnet against the live
-  // contract: a cold write estimates ~239k and reverts outright at 215k, while
-  // a warm one lands in ~87k. Monad bills the limit, so one shared number was
-  // both too small to create a room and ~2.5x too expensive to play with.
+  // updating it: it pays three cold storage slots (state, seq, creator) plus
+  // a push into the lobby registry, and it scales per 32 bytes of payload.
+  // Measured on testnet against the live contract: creating a room costs
+  // 210k with the vault's 57-byte seed, 239k at 81 bytes, and a real tx at a
+  // 215k limit reverts without storing anything. Updating an existing room
+  // costs ~87k.
+  //
+  // One shared 215k limit therefore left the vault's room creation with 2%
+  // headroom — any growth in the seed would have broken it silently — while
+  // charging every ordinary move ~2.5x what it needs. Monad bills the limit,
+  // so the padding was a permanent tax and the margin was a landmine.
   setState: 120_000n,
   stake: 95_000n,
   refund: 75_000n,

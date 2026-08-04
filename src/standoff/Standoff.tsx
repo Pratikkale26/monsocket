@@ -233,7 +233,10 @@ export default function Standoff() {
         }
       });
 
-      if (!watchMode && name) void room.emit("hello", { name });
+      // Always announce yourself — this emit is how the other side learns your
+      // address, and the referee cannot judge a round against a player it has
+      // never seen. A blank name must not make you invisible.
+      if (!watchMode) void room.emit("hello", { name: name || short(sock.address) });
       setPhase("live");
       void refreshBalance();
     } catch (e) {
@@ -315,8 +318,10 @@ export default function Standoff() {
       const bMove = bAddr ? (revealsRef.current.get(`${r}:${bAddr}`) ?? null) : null;
       const bothIn = aMove !== null && bMove !== null;
       const windowShut = now > revealDeadline;
-      // Nobody has even joined yet — don't burn rounds against an empty chair.
-      if (!bAddr && !commitsRef.current.has(`${r}:${aAddr}`)) return;
+      // Never resolve against an opponent we have never seen. Forfeiting a
+      // round to a phantom is far worse than waiting: an opponent whose
+      // announce tx was slow would otherwise lose rounds they never saw.
+      if (!bAddr) return;
       if (!bothIn && !windowShut) return;
       if (sentRef.current.has(`resolve:${r}`)) return;
       sentRef.current.add(`resolve:${r}`);
