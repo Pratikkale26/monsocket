@@ -43,10 +43,19 @@ export const monadTestnet = defineChain({
 const GAS = {
   broadcast: 30_000n,
   send: 36_000n,
-  setState: 215_000n, // first write also registers the room in the lobby index
+  // Writing a room's state for the FIRST time is a different animal from
+  // updating it: it pays for three cold storage slots (state, seq, creator)
+  // plus a push into the lobby registry. Measured on testnet against the live
+  // contract: a cold write estimates ~239k and reverts outright at 215k, while
+  // a warm one lands in ~87k. Monad bills the limit, so one shared number was
+  // both too small to create a room and ~2.5x too expensive to play with.
+  setState: 120_000n,
   stake: 95_000n,
   refund: 75_000n,
 } as const;
+
+/** Cold-path limit for the write that brings a room into existence. */
+const GAS_SETSTATE_CREATE = 320_000n;
 const MAX_FEE = 150_000_000_000n; // 150 gwei (min base fee is 100)
 const PRIORITY = 2_000_000_000n;
 const POLL_MS = 250;
@@ -117,6 +126,7 @@ export class MonSocket {
     fn: "broadcast" | "send" | "setState" | "stake" | "refund",
     args: readonly unknown[],
     value = 0n,
+    gas?: bigint,
   ): Promise<Hex> {
     const nonce = await this.nextNonce();
     const serialized = await this.account.signTransaction({
@@ -125,7 +135,7 @@ export class MonSocket {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: encodeFunctionData({ abi: ABI, functionName: fn, args: args as any }),
       nonce,
-      gas: GAS[fn],
+      gas: gas ?? GAS[fn],
       maxFeePerGas: MAX_FEE,
       maxPriorityFeePerGas: PRIORITY,
       chainId: monadTestnet.id,
@@ -237,7 +247,13 @@ export class MonSocket {
     const room = new Room<T, P, M>(this, this.roomId(name), name);
     const existing = await room.getState();
     if (existing === null && opts.initialState !== undefined && !opts.readOnly) {
-      void this.write("setState", [room.id, stringToHex(JSON.stringify(opts.initialState))]);
+      // Bringing the room into existence — the expensive cold write.
+      void this.write(
+        "setState",
+        [room.id, stringToHex(JSON.stringify(opts.initialState))],
+        0n,
+        GAS_SETSTATE_CREATE,
+      );
     }
     return room;
   }
@@ -250,6 +266,10 @@ export class Room<T = unknown, P = unknown, M = unknown> {
   private fromBlock: bigint | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private polling = false;
+  /** Has this room's state ever been observed to exist? Until it has, a write
+   *  might be the one that creates the room and must carry the cold-path gas
+   *  limit — guessing low there doesn't cost less, it reverts. */
+  private stateSeen = false;
 
   private sock: MonSocket;
   readonly id: Hex;
@@ -273,7 +293,13 @@ export class Room<T = unknown, P = unknown, M = unknown> {
 
   /** Write the shared room state (last-write-wins, seq-ordered onchain). */
   async setState(data: T): Promise<void> {
-    await this.sock.write("setState", [this.id, stringToHex(JSON.stringify(data))]);
+    await this.sock.write(
+      "setState",
+      [this.id, stringToHex(JSON.stringify(data))],
+      0n,
+      this.stateSeen ? undefined : GAS_SETSTATE_CREATE,
+    );
+    this.stateSeen = true;
   }
 
   /** Read the shared state straight from contract storage — free. */
@@ -285,6 +311,7 @@ export class Room<T = unknown, P = unknown, M = unknown> {
       args: [this.id],
     })) as Hex;
     if (!raw || raw === "0x") return null;
+    this.stateSeen = true;
     try {
       return JSON.parse(hexToString(raw)) as T;
     } catch {
@@ -409,6 +436,7 @@ export class Room<T = unknown, P = unknown, M = unknown> {
         } else if (decoded.eventName === "StateChange") {
           const state = parse<T>(args.data as Hex);
           if (state === null) continue;
+          this.stateSeen = true;
           for (const cb of this.stateCbs)
             safely(() => cb({ player, seq: Number(args.seq as bigint), state }));
         }
