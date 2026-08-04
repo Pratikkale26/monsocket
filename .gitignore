@@ -3,3 +3,4 @@ dist/
 *.tsbuildinfo
 .vercel
 scripts/deployer-key.json
+notes/
