@@ -29,7 +29,7 @@ import {
   walkable,
 } from "./vault";
 import { isMuted, setMuted, sfx, startAmbient, stopAmbient } from "../../sound";
-import { sock } from "../../arcade/session";
+import { loadPlayerName, savePlayerName, sock } from "../../arcade/session";
 import VaultPreview from "./VaultPreview";
 
 const params = new URLSearchParams(location.search);
@@ -85,12 +85,9 @@ async function goLive(): Promise<Vault> {
 }
 /* ────────────────────────────────────────────────────────────────────────── */
 
-function loadName(): string {
-  return (
-    localStorage.getItem("monsocket-escape:name") ??
-    `anon-${sock.address.slice(2, 6)}`
-  );
-}
+// Identity belongs to the arcade, not to a cabinet — the name you set on the
+// floor is the name your partner sees in here.
+const loadName = loadPlayerName;
 
 const fmtTime = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -347,7 +344,7 @@ export default function Vault() {
   };
 
   const enter = async () => {
-    localStorage.setItem("monsocket-escape:name", name);
+    savePlayerName(name);
     setPhase("connecting");
     try {
       const room = await goLive();
