@@ -20,7 +20,7 @@ import {
   walkable,
   type Held,
   type Level,
-} from "../src/vault.ts";
+} from "../src/games/vault/vault.ts";
 
 let pass = 0;
 let fail = 0;

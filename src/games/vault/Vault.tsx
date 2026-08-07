@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatEther, parseEther } from "viem";
-import {
-  MonSocket,
-  PresenceEntry,
-  Room,
-  smoothPresence,
-} from "monsocket";
-import { CONTRACT, RPC_URL } from "./lib/deployment";
+import { PresenceEntry, Room, smoothPresence } from "monsocket";
+import { CONTRACT } from "../../lib/deployment";
 import {
   Bubble,
   CHARGE_MS,
@@ -33,10 +28,10 @@ import {
   tileUnder,
   walkable,
 } from "./vault";
-import { isMuted, setMuted, sfx, startAmbient, stopAmbient } from "./sound";
-import { loadBurnerKey } from "./wallet";
+import { isMuted, setMuted, sfx, startAmbient, stopAmbient } from "../../sound";
+import { sock } from "../../arcade/session";
+import VaultPreview from "./VaultPreview";
 
-const burnerKey = loadBurnerKey();
 const params = new URLSearchParams(location.search);
 
 type Player = { x: number; y: number; facing: number; carry: number; name: string };
@@ -55,7 +50,6 @@ const watchMode = params.get("watch") === "1" && joinTarget !== null;
  * transaction on Monad, streamed back off the chain at ~300ms blocks.
  * ────────────────────────────────────────────────────────────────────────── */
 const FRESH_VAULT: VaultState = { level: 0, doors: 0, keyA: 0, keyB: 0, start: 0, run: 0 };
-const sock = MonSocket.connect({ key: burnerKey, contract: CONTRACT, rpc: RPC_URL });
 
 /** Whatever another app (or a griefer) wrote into this room id must never
  *  crash the game — only adopt states that actually look like a vault. */
@@ -82,7 +76,11 @@ async function goLive(): Promise<Vault> {
     initialState: FRESH_VAULT,
     readOnly: watchMode,
   });
-  history.replaceState(null, "", `?room=${name}${watchMode ? "&watch=1" : ""}`);
+  history.replaceState(
+    null,
+    "",
+    `${location.pathname}?room=${name}${watchMode ? "&watch=1" : ""}`,
+  );
   return room;
 }
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -99,88 +97,9 @@ const fmtTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
-/** Title-screen attract mode: the real game world, rendered live, cycling
- *  through all three chambers — coolant shimmering, pulse walls beating. */
-function VaultPreview() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const ctx = ref.current!.getContext("2d")!;
-    // 2x backing store: crisp at any display scale (idempotent transform)
-    ctx.setTransform(2, 0, 0, 2, 0, 0);
-    let raf = 0;
-    let lvIdx = 0;
-    let switchAt = Date.now() + 4_000;
-    const loop = (t: number) => {
-      if (Date.now() > switchAt) {
-        lvIdx = (lvIdx + 1) % LEVELS.length;
-        switchAt = Date.now() + 4_000;
-      }
-      const L = LEVELS[lvIdx];
-      drawVault(ctx, L, {
-        t,
-        doors: 0,
-        frozen: false,
-        role: -1,
-        seeCode: [],
-        buf: "",
-        meTile: "",
-        partnerTile: "",
-        keyA: 0,
-        keyB: 0,
-        keyWindowMs: L.keyWindowMs,
-        pulseOn: pulseOpen(1, Date.now()),
-        valveHalf: 0,
-        valveAt: 0,
-        carryMe: false,
-        carryPartner: false,
-        chargeFrac: 0,
-        ventOff: false,
-        heldI: false,
-        heldJ: false,
-      });
-      drawPlayer(
-        ctx,
-        "demo-you",
-        { x: L.spawn.x, y: L.spawn.y, facing: 0, name: "you" },
-        { self: true, t },
-      );
-      drawPlayer(
-        ctx,
-        "demo-p2",
-        { x: L.spawn.x + 34, y: L.spawn.y + 6, facing: 1, name: "partner" },
-        { t },
-      );
-      drawAmbient(ctx, [
-        { x: L.spawn.x, y: L.spawn.y, r: 140 },
-        { x: L.spawn.x + 34, y: L.spawn.y + 6, r: 110 },
-        ...sceneLights(L, 0),
-      ]);
-      ctx.font = "600 9px 'IBM Plex Mono', monospace";
-      ctx.textAlign = "left";
-      ctx.fillStyle = "rgba(212, 175, 90, 0.9)";
-      ctx.fillText(`CHAMBER 0${L.index + 1} · ${L.name.toUpperCase()}`, 10, HEIGHT - 10);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  return (
-    <div className="preview-wrap">
-      <span className="preview-chip">LIVE WORLD PREVIEW</span>
-      <canvas
-        ref={ref}
-        width={WIDTH * 2}
-        height={HEIGHT * 2}
-        className="preview"
-        aria-label="Live preview of the vault chambers"
-      />
-    </div>
-  );
-}
-
 const EXPLORER = `https://testnet.monadvision.com/address/${CONTRACT}`;
 
-export default function App() {
+export default function Vault() {
   const [phase, setPhase] = useState<"funding" | "connecting" | "live" | "error">(
     "funding",
   );
@@ -1153,7 +1072,10 @@ export default function App() {
     <div className="app">
       <header>
         <h1>
-          monsocket <span className="tag">THE VAULT — a two-player heist on Monad</span>
+          <a className="back-to-floor" href="/" aria-label="Back to the arcade floor">
+            ← COINOP
+          </a>
+          <span className="tag">THE VAULT — a two-player heist on Monad</span>
         </h1>
         {phase === "live" && room && (
           <div className="status">

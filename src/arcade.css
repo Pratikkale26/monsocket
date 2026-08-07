@@ -1,0 +1,566 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   COINOP — the arcade floor
+   A dark room lit only by the machines. Each cabinet carries a lit marquee
+   and a screen running the real game. The signature is the cabinet itself:
+   marquee, glass, coin slot. Everything else stays quiet.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cx {
+  --room: #070b08;
+  --room-2: #0b120d;
+  --panel: #101a13;
+  --line: #1e2c23;
+  --line-strong: #33493b;
+  --gold: #d4af5a;
+  --gold-bright: #e9c877;
+  --text: #ece7db;
+  --soft: #b9bdb2;
+  --muted: #7d8c81;
+
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  background:
+    radial-gradient(900px 420px at 50% -6%, rgba(212, 175, 90, 0.05), transparent 65%),
+    var(--room);
+}
+
+/* ── top rail: the coin box ── */
+
+.cx-rail {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 26px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+}
+
+.cx-logo {
+  font-family: var(--font-display);
+  font-size: 19px;
+  letter-spacing: 0.02em;
+  color: var(--gold-bright);
+  text-decoration: none;
+  text-shadow: 0 2px 0 #6b5220, 0 3px 0 #4a3816;
+}
+
+.cx-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-top: 3px;
+}
+
+.cx-rail-gap {
+  flex: 1;
+}
+
+.cx-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cx-name input {
+  width: 116px;
+  background: var(--room-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  padding: 6px 9px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.cx-name input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+/* the credit readout — a coin count, not a balance */
+.cx-coinbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #0a0f0c;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.6);
+}
+
+.cx-credits {
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 600;
+  color: #3f4a42;
+  min-width: 24px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cx-coinbox.on .cx-credits {
+  color: var(--gold-bright);
+  text-shadow: 0 0 14px rgba(233, 200, 119, 0.55);
+}
+
+.cx-credits-label {
+  display: grid;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.cx-credits-label em {
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: #5d6b62;
+}
+
+/* ── the floor ── */
+
+.cx-floor {
+  flex: 1;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 46px 26px 60px;
+}
+
+.cx-headline {
+  display: grid;
+  gap: 16px;
+  max-width: 640px;
+  margin-bottom: 40px;
+}
+
+.cx-headline h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 5.2vw, 52px);
+  line-height: 1.06;
+  color: var(--text);
+  text-shadow: 0 3px 0 #10180f;
+}
+
+.cx-headline p {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--soft);
+}
+
+/* ── insert coin ── */
+
+.cx-insert {
+  display: grid;
+  gap: 12px;
+  padding: 22px 24px;
+  margin-bottom: 40px;
+  border: 1px solid rgba(212, 175, 90, 0.28);
+  background: linear-gradient(180deg, rgba(212, 175, 90, 0.06), transparent);
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+}
+
+.cx-blink {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--gold-bright);
+  animation: cxblink 1.35s steps(1) infinite;
+}
+
+@keyframes cxblink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.cx-insert p {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--soft);
+}
+
+.cx-insert-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.cx-addr {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.cx-btn {
+  background: rgba(212, 175, 90, 0.07);
+  color: var(--soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 8px 14px;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.cx-btn:hover {
+  border-color: var(--gold);
+  color: var(--text);
+  background: rgba(212, 175, 90, 0.13);
+}
+
+.cx-btn.primary {
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold) 62%, #a87f35);
+  border-color: #57431a;
+  color: #241a08;
+  font-weight: 600;
+  box-shadow: 0 3px 0 #57431a;
+}
+
+.cx-btn.primary:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 #57431a;
+}
+
+/* ── floor label ── */
+
+.cx-floor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cx-live {
+  color: #5f6f65;
+  letter-spacing: 0.1em;
+}
+
+/* ── the cabinets ── */
+
+.cx-cabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(288px, 1fr));
+  gap: 26px;
+  align-items: start;
+}
+
+.cab {
+  --glow: hsl(var(--cab-hue) 70% 62%);
+  display: grid;
+  gap: 0;
+  background: linear-gradient(180deg, #16211a 0%, #0e1712 62%, #0a110c 100%);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px 14px 6px 6px;
+  padding: 12px 12px 0;
+  box-shadow:
+    0 30px 60px -34px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.cab:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 38px 70px -34px rgba(0, 0, 0, 0.95),
+    0 0 34px -14px hsl(var(--cab-hue) 70% 50% / 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* the lit sign on top of the machine */
+.cab-marquee {
+  position: relative;
+  padding: 12px 14px;
+  border-radius: 8px 8px 3px 3px;
+  text-align: center;
+  background: linear-gradient(
+    180deg,
+    hsl(var(--cab-hue) 46% 22%) 0%,
+    hsl(var(--cab-hue) 40% 13%) 100%
+  );
+  border: 1px solid hsl(var(--cab-hue) 44% 30%);
+  box-shadow:
+    inset 0 -10px 22px -12px hsl(var(--cab-hue) 80% 60% / 0.75),
+    0 0 26px -8px hsl(var(--cab-hue) 75% 52% / 0.42);
+}
+
+.cab-marquee h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.015em;
+  color: #fbf3df;
+  text-shadow: 0 0 16px hsl(var(--cab-hue) 90% 72% / 0.85);
+}
+
+.cab.dark .cab-marquee {
+  background: linear-gradient(180deg, #141c17, #0d130f);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.cab.dark .cab-marquee h2 {
+  color: #55635a;
+  text-shadow: none;
+}
+
+/* the glass */
+.cab-screen {
+  position: relative;
+  margin: 12px 2px 0;
+  aspect-ratio: 28 / 12;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #050706;
+  border: 1px solid #05080600;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.9),
+    inset 0 0 44px rgba(0, 0, 0, 0.85);
+}
+
+.cab-screen canvas,
+.cab-screen .preview-wrap,
+.cab-screen .preview {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: none !important;
+  animation: none !important;
+}
+
+.cab-screen .preview-chip {
+  display: none;
+}
+
+/* scanlines + the curve of the tube */
+.cab-scan,
+.cab-glass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cab-scan {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0 2px,
+    rgba(0, 0, 0, 0.16) 3px
+  );
+  mix-blend-mode: multiply;
+}
+
+.cab-glass {
+  background:
+    radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.07), transparent 46%),
+    radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+.cab-off,
+.cab-boot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: #2f3a34;
+}
+
+/* body copy on the machine */
+.cab-body {
+  padding: 14px 4px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.cab-kind {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--cab-hue) 42% 62%);
+}
+
+.cab.dark .cab-kind {
+  color: var(--muted);
+}
+
+.cab-kind span {
+  color: var(--muted);
+}
+
+.cab-tag {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--soft);
+  min-height: 2.9em;
+}
+
+/* the coin slot */
+.cab-coin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: calc(100% + 24px);
+  margin: 0 -12px;
+  padding: 14px;
+  border: none;
+  border-top: 1px solid var(--line-strong);
+  border-radius: 0 0 6px 6px;
+  background: linear-gradient(180deg, #1d2a20, #131d17);
+  color: var(--gold-bright);
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.cab-coin:hover {
+  background: linear-gradient(180deg, #26362a, #17231b);
+}
+
+.cab-slot {
+  width: 22px;
+  height: 5px;
+  border-radius: 3px;
+  background: #050706;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.cab-coin.off {
+  color: #4d5a51;
+  cursor: default;
+  background: #0d130f;
+  font-size: 11px;
+}
+
+/* ── boot / not found ── */
+
+.cx-boot {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+  background: var(--room, #070b08);
+  color: #ece7db;
+}
+
+.cx-boot p {
+  margin: 0;
+  color: #b9bdb2;
+  font-size: 14px;
+}
+
+/* ── footer ── */
+
+.cx-foot {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 18px 26px 26px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cx-foot a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+.cx-foot a:hover {
+  color: var(--gold-bright);
+}
+
+@media (max-width: 720px) {
+  .cx-rail {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .cx-name {
+    order: 3;
+  }
+
+  .cx-floor {
+    padding: 32px 16px 48px;
+  }
+
+  .cx-cabs {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-blink {
+    animation: none;
+  }
+
+  .cab {
+    transition: none;
+  }
+}
+
+/* the way back to the floor, from inside a cabinet */
+.back-to-floor {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--gold);
+  text-decoration: none;
+  margin-right: 10px;
+  transition: color 0.15s ease;
+}
+
+.back-to-floor:hover {
+  color: var(--gold-bright);
+}
