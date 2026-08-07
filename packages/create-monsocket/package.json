@@ -1,0 +1,34 @@
+{
+  "name": "create-monsocket",
+  "version": "0.1.0",
+  "description": "Scaffold a realtime onchain multiplayer app on Monad (monsocket)",
+  "license": "MIT",
+  "author": "Pratik Kale",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pratikkale26/monsocket.git",
+    "directory": "packages/create-monsocket"
+  },
+  "keywords": [
+    "create",
+    "monad",
+    "monsocket",
+    "realtime",
+    "multiplayer",
+    "onchain"
+  ],
+  "bin": {
+    "create-monsocket": "index.js"
+  },
+  "files": [
+    "index.js",
+    "template",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

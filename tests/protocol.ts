@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { createWalletClient, formatEther, http, parseEther } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MonSocket, monadTestnet } from "../src/lib/monsocket.ts";
+import { MonSocket, monadTestnet } from "monsocket";
 import { CONTRACT, RPC_URL } from "../src/lib/deployment.ts";
 
 let pass = 0;

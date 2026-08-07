@@ -1,11 +1,26 @@
 # Quickstart
 
-monsocket currently ships **in-repo**: a single-file TypeScript client
-(`src/lib/monsocket.ts`, built on [viem](https://viem.sh)) plus a ~60-line
-Solidity contract (`contracts/Monsocket.sol`) already deployed on Monad
-testnet. An npm package is on the roadmap — today you clone and go.
+monsocket is an npm package built on [viem](https://viem.sh), talking to a
+~60-line Solidity contract already deployed on Monad testnet. You do not need
+to deploy anything.
 
-## Run The Vault (the demo)
+## Scaffold an app
+
+```bash
+npm create monsocket my-app
+cd my-app && npm install && npm run dev
+```
+
+You get a shared-cursor room: every cursor move is a real onchain transaction,
+and the whole integration is the top 40 lines of `src/App.tsx`.
+
+## Or add it to an existing app
+
+```bash
+npm i monsocket
+```
+
+## Run The Vault (the flagship demo)
 
 ```bash
 git clone https://github.com/Pratikkale26/monsocket
@@ -18,18 +33,14 @@ Fund the burner wallet the title screen shows with a little testnet MON
 ([faucet](https://faucet.monad.xyz)), open the invite link in a second
 browser, and escape together.
 
-## Use the library in your own app
-
-Copy `src/lib/monsocket.ts` (and `src/lib/contract.ts` + the deployed
-address from `src/lib/deployment.ts`) into your project:
+## The API
 
 ```ts
-import { MonSocket, smoothPresence } from "./lib/monsocket";
+import { MonSocket, MONSOCKET_TESTNET_CONTRACT, smoothPresence } from "monsocket";
 
 const sock = MonSocket.connect({
-  key: burnerKey,            // a throwaway private key — signs every action
-  contract: MONSOCKET,       // the deployed Monsocket contract
-  rpc: "https://testnet-rpc.monad.xyz",
+  key: burnerKey,                        // a throwaway private key — signs every action
+  contract: MONSOCKET_TESTNET_CONTRACT,  // or your own deployment
 });
 
 // same name → same room, on every client

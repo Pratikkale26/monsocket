@@ -1,0 +1,56 @@
+{
+  "name": "monsocket",
+  "version": "0.1.0",
+  "description": "Socket.io for Monad — realtime multiplayer rooms, presence, broadcast and shared state where every action is an onchain transaction",
+  "license": "MIT",
+  "author": "Pratik Kale",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pratikkale26/monsocket.git",
+    "directory": "packages/monsocket"
+  },
+  "homepage": "https://github.com/Pratikkale26/monsocket#readme",
+  "keywords": [
+    "monad",
+    "realtime",
+    "multiplayer",
+    "onchain",
+    "rooms",
+    "presence",
+    "websocket",
+    "socket.io",
+    "games"
+  ],
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

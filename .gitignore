@@ -4,3 +4,4 @@ dist/
 .vercel
 scripts/deployer-key.json
 notes/
+*.tgz

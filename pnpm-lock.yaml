@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      monsocket:
+        specifier: workspace:*
+        version: link:packages/monsocket
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -36,6 +39,16 @@ importers:
       vite:
         specifier: ^6.0.0
         version: 6.4.3
+
+  packages/monsocket:
+    dependencies:
+      viem:
+        specifier: ^2.21.0
+        version: 2.55.10(typescript@5.9.3)
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
 
 packages:
 

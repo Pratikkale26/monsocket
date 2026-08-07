@@ -1,23 +1,14 @@
 {
-  "name": "monsocket-arcade",
+  "name": "my-monsocket-app",
   "private": true,
-  "description": "The Onchain Arcade \u2014 games built on monsocket. The Vault is game one.",
-  "license": "MIT",
   "type": "module",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "compile": "node scripts/compile.mjs",
-    "deploy": "node scripts/deploy.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "monsocket": "workspace:*",
+    "monsocket": "^0.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "viem": "^2.21.0"
@@ -26,7 +17,6 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "solc": "^0.8.28",
     "typescript": "^5.8.3",
     "vite": "^6.0.0"
   }

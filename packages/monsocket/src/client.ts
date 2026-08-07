@@ -28,7 +28,14 @@ import {
   type PublicClient,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { ABI } from "./contract.ts";
+import { ABI } from "./abi.js";
+
+/** The Monsocket contract deployed on Monad testnet. Rooms are open bytes32
+ *  topics, so anyone can join this one — or pass their own deployment to
+ *  `connect()`. Named explicitly on purpose: a default address baked into a
+ *  published package can never be changed without breaking installs. */
+export const MONSOCKET_TESTNET_CONTRACT =
+  "0xf8a5324af88f305ea8db0b60d09c5de1219e4ab4" as const;
 
 export const monadTestnet = defineChain({
   id: 10143,

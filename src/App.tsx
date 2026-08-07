@@ -5,7 +5,7 @@ import {
   PresenceEntry,
   Room,
   smoothPresence,
-} from "./lib/monsocket";
+} from "monsocket";
 import { CONTRACT, RPC_URL } from "./lib/deployment";
 import {
   Bubble,

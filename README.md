@@ -4,8 +4,14 @@
 real transaction on the Monad L1 — no game server, no join fee, spectating
 costs nothing.
 
+```bash
+npm i monsocket        # or: npm create monsocket my-app
+```
+
 ```ts
-const sock = MonSocket.connect({ key: burnerKey, contract: MONSOCKET });
+import { MonSocket, MONSOCKET_TESTNET_CONTRACT } from "monsocket";
+
+const sock = MonSocket.connect({ key: burnerKey, contract: MONSOCKET_TESTNET_CONTRACT });
 const room = await sock.joinOrCreate("lobby", { initialState: { door: false } });
 
 room.onPresence(({ player, data }) => drawAvatar(player, data)); // streamed off 300ms blocks
