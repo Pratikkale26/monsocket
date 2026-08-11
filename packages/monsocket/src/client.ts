@@ -8,6 +8,8 @@
  *    gas_used — padding is real money), fired without simulation.
  *  - reads: one getLogs poll per room per ~250ms against `latest`, which on
  *    Monad is PROPOSED state — speculative, one block ahead of finality.
+ *    The filter is applied at the node (room id is an indexed topic), so a
+ *    client never downloads other rooms' traffic.
  *  - rooms are open bytes32 topics; presence and messages live purely in
  *    event logs (no storage), shared state sits in one storage slot so a
  *    late joiner reads it directly instead of replaying history.
@@ -18,14 +20,17 @@ import {
   createPublicClient,
   decodeEventLog,
   defineChain,
+  encodeEventTopics,
   encodeFunctionData,
   hexToString,
   http,
   keccak256,
+  numberToHex,
   stringToHex,
   toBytes,
   type Hex,
   type PublicClient,
+  type RpcLog,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { ABI } from "./abi.js";
@@ -72,6 +77,14 @@ const GAS_SETSTATE_CREATE = 320_000n;
 const MAX_FEE = 150_000_000_000n; // 150 gwei (min base fee is 100)
 const PRIORITY = 2_000_000_000n;
 const POLL_MS = 250;
+
+/** The three events a room actually consumes, pre-encoded as the topic[0]
+ *  alternatives of an eth_getLogs filter. Staked and Refunded are absent on
+ *  purpose: the poll never decodes them, so there is no reason to ship them
+ *  down the wire. */
+const ROOM_EVENT_TOPICS = (["Presence", "Message", "StateChange"] as const).map(
+  (eventName) => encodeEventTopics({ abi: ABI, eventName })[0],
+);
 
 export interface PresenceEntry<P> {
   player: string;
@@ -391,21 +404,38 @@ export class Room<T = unknown, P = unknown, M = unknown> {
     this.polling = true;
     try {
       const head = await this.sock.client.getBlockNumber({ cacheTime: 0 });
-      if (this.fromBlock === null) this.fromBlock = head;
-      if (head < this.fromBlock) return;
+      let from = this.fromBlock ?? head;
+      if (head < from) return;
       // The RPC caps eth_getLogs at a 100-block range, and a backgrounded
       // tab (throttled timers) can fall much further behind. Skip ahead in
       // one capped hop — and because that skips ground, re-read the shared
       // state from storage so puzzles never stay stale.
-      if (head - this.fromBlock > 90n) {
-        this.fromBlock = head - 90n;
+      if (head - from > 90n) {
+        from = head - 90n;
         if (this.stateCbs.length) void this.refreshState();
       }
-      const logs = await this.sock.client.getLogs({
-        address: this.sock.contract,
-        fromBlock: this.fromBlock,
-        toBlock: head,
-      });
+      this.fromBlock = from;
+      // Filter at the node, not in the browser. `room` is topic 1 on all
+      // three events, so the RPC can ship this room's traffic alone instead
+      // of every room of every app sharing the contract — and that saving
+      // grows as the contract does.
+      //
+      // This goes through eth_getLogs directly because viem's
+      // getLogs({ events, args }) cannot express it: it ORs the signatures
+      // into topic 0 but drops `args` at the RPC layer and re-applies them
+      // client-side in parseEventLogs, so the same bytes still cross the
+      // wire. Decoding below was already manual, so nothing is lost.
+      const logs = (await this.sock.client.request({
+        method: "eth_getLogs",
+        params: [
+          {
+            address: this.sock.contract,
+            topics: [ROOM_EVENT_TOPICS, this.id],
+            fromBlock: numberToHex(from),
+            toBlock: numberToHex(head),
+          },
+        ],
+      })) as RpcLog[];
       this.fromBlock = head + 1n;
       for (const log of logs) {
         let decoded;
@@ -415,10 +445,15 @@ export class Room<T = unknown, P = unknown, M = unknown> {
           continue;
         }
         const args = decoded.args as Record<string, unknown>;
+        // Belt and braces: the topic filter above already pins the room, but
+        // a proxy or RPC that quietly ignores topics must not leak another
+        // room's events into this one's callbacks.
         if ((args.room as string)?.toLowerCase() !== this.id.toLowerCase()) continue;
         const player = (args.player as string).toLowerCase();
+        // Raw JSON-RPC hands these back as hex strings, not numbers.
         // 100k logs/block headroom keeps seq strictly monotonic across blocks
-        const seq = Number(log.blockNumber ?? 0n) * 100_000 + (log.logIndex ?? 0);
+        const seq =
+          Number(log.blockNumber ?? 0) * 100_000 + Number(log.logIndex ?? 0);
         const parse = <V,>(hex: Hex): V | null => {
           try {
             return JSON.parse(hexToString(hex)) as V;
