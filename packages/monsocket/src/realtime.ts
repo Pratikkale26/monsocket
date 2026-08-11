@@ -107,6 +107,10 @@ export class LogStream {
   private readonly WS: WebSocketCtor | null;
 
   private ws: WebSocketLike | null = null;
+  /** A socket exists but is still handshaking. Subscribing now would be
+   *  dropped by a real WebSocket and then re-sent on open — leaving the node
+   *  holding two subscriptions for the room, only one of which is tracked. */
+  private wsOpen = false;
   private nextId = 1;
   /** roomId -> subscription. One entry per room, not per callback. */
   private subs = new Map<string, Sub>();
@@ -138,8 +142,10 @@ export class LogStream {
   attach(roomId: Hex, onLog: Sub["onLog"], onLive: Sub["onLive"]): () => void {
     const sub: Sub = { roomId, onLog, onLive, subId: null };
     this.subs.set(roomId.toLowerCase(), sub);
+    // If the socket is still coming up, the open handler subscribes every
+    // room — sending now would only duplicate it.
     if (!this.ws) this.connect();
-    else this.sendSubscribe(sub);
+    else if (this.wsOpen) this.sendSubscribe(sub);
     return () => this.detach(roomId);
   }
 
@@ -203,6 +209,7 @@ export class LogStream {
     this.ws = ws;
 
     ws.addEventListener("open", () => {
+      this.wsOpen = true;
       this.backoff = BACKOFF_MIN_MS;
       // Subscription ids do not survive a socket, so every room resubscribes.
       this.bySubId.clear();
@@ -218,6 +225,7 @@ export class LogStream {
     const drop = () => {
       if (this.ws !== ws) return; // a newer socket already took over
       this.ws = null;
+      this.wsOpen = false;
       this.stopPing();
       for (const sub of this.subs.values()) {
         sub.subId = null;
