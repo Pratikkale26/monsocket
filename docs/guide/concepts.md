@@ -44,13 +44,25 @@ program-side validation layer) — monsocket is deliberately game-agnostic.
 - **Writes are fire-and-forget** raw EIP-1559 transactions signed by a
   local burner key with a **local nonce counter** (serialized at startup
   so racing writes can never share a nonce). The log stream is the ack.
-- **Reads poll `eth_getLogs` every 250ms against `latest`** — which on
-  Monad is the **Proposed** block, one step ahead of finality. The public
-  RPC caps ranges at 100 blocks; monsocket catches up in capped hops and
-  re-reads state from storage after any gap, so backgrounded tabs recover.
-- **Realistic latency**: ~1–2s write→observe through the public RPC.
-  `smoothPresence` renders it as continuous 60fps motion. Turn-based and
-  puzzle games feel instant; 10Hz twitch games are not the target.
+- **Two read paths.** By default monsocket polls `eth_getLogs` every 250ms
+  against `latest` — which on Monad is the **Proposed** block, one step
+  ahead of finality. `realtime: true` switches to Monad's `monadLogs`
+  subscription instead, which publishes as soon as the node has
+  speculatively executed the block.
+
+  Either way the filter is applied **at the node** — the room id is an
+  indexed topic — so a client never downloads other rooms' traffic, however
+  many apps share the contract.
+
+  The polling path catches up in capped hops (the public RPC limits
+  `eth_getLogs` to 100-block ranges) and re-reads state from storage after
+  any gap, so backgrounded tabs recover.
+- **Measured latency**: median **1524ms** polling, **889ms** on the
+  subscription — and the tail is where it shows most, 4198ms against 1710ms
+  at the worst sample. [The numbers, the method, and the parts that did not
+  hold up](/guide/latency). `smoothPresence` renders either as continuous
+  60fps motion. Turn-based and puzzle games feel instant; 10Hz twitch games
+  are not the target.
 
 ## Trust model
 

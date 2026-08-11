@@ -1,6 +1,6 @@
 # API reference
 
-Everything lives in `src/lib/monsocket.ts` (client, viem-based) and
+Everything lives in `packages/monsocket/src` (client, viem-based) and
 `contracts/Monsocket.sol`. Deployed on Monad testnet at
 [`0xf8a5324af88f305ea8db0b60d09c5de1219e4ab4`](https://testnet.monadvision.com/address/0xf8a5324af88f305ea8db0b60d09c5de1219e4ab4).
 
@@ -8,7 +8,7 @@ Everything lives in `src/lib/monsocket.ts` (client, viem-based) and
 
 | method | description |
 |---|---|
-| `MonSocket.connect({ key, contract, rpc? })` | Create a client from a burner private key, contract address, and RPC URL. No network calls yet. |
+| `MonSocket.connect({ key, contract, rpc?, realtime? })` | Create a client from a burner private key, contract address, and RPC URL. No network calls yet. `realtime` opts into the `monadLogs` subscription — see below. |
 | `sock.address` | The burner's address — your player identity. |
 | `sock.balance()` | Burner balance in wei. |
 | `sock.roomId(name)` | `keccak256(name)` — same name → same room id on every client. |
@@ -28,13 +28,42 @@ Everything lives in `src/lib/monsocket.ts` (client, viem-based) and
 | `room.emit(name, data)` | Named ephemeral event (chat, emotes) — event log, zero storage. |
 | `room.setState(data)` | Write the shared room state (last-write-wins, seq-ordered onchain). |
 | `room.getState()` | Read shared state from contract storage — free. |
-| `room.onPresence(cb)` | Every player's broadcasts, with `player`, `data`, `seq`. |
+| `room.onPresence(cb)` | Every player's broadcasts, with `player`, `data`, `seq`, `commitState?`. |
 | `room.onMessage(name?, cb)` | Emitted events, optionally filtered by name. |
 | `room.onStateChange(cb)` | Shared-state updates with the onchain `seq`. |
-| `room.leave()` | Stop polling. (There is nothing onchain to tear down.) |
+| `room.live` | `true` while this room is on the subscription rather than the poll. |
+| `room.leave()` | Stop reading. (There is nothing onchain to tear down.) |
 
 All payloads are JSON-encoded. `Room<T, P, M>` types state, presence, and
 messages independently.
+
+## Realtime (`monadLogs`)
+
+Passing `realtime` swaps the 250ms poll for Monad's speculative log
+subscription: median write→observe drops from 1524ms to 889ms, and the worst
+sample from 4198ms to 1710ms. See [Latency](/guide/latency) for the method
+and the caveats.
+
+```ts
+MonSocket.connect({ key, contract, realtime: true })
+```
+
+| option | description |
+|---|---|
+| `realtime: true` | Subscribe, deriving the WebSocket URL from `rpc`. |
+| `realtime.url` | WebSocket endpoint, if it differs from `rpc`. |
+| `realtime.minCommitState` | Hold events until the block reaches at least this state — `"Proposed"` (default), `"Voted"`, `"Finalized"`, `"Verified"`. |
+| `realtime.WebSocketImpl` | A WebSocket constructor. Required on Node, unused in browsers. |
+
+Three things worth knowing:
+
+- **One socket serves every room** on a client. Several rooms open is still
+  one connection.
+- **Every log is delivered four times**, once per commit state. monsocket
+  deduplicates, so a callback fires once. Events carry the `commitState`
+  they arrived at, so an app can render its own confidence.
+- **It cannot break a room.** No WebSocket, a refused subscription, or a
+  dropped connection all fall back to polling and recover on their own.
 
 ## Helpers
 

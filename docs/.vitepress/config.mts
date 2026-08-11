@@ -18,6 +18,7 @@ export default defineConfig({
         items: [
           { text: "Quickstart", link: "/guide/quickstart" },
           { text: "Concepts", link: "/guide/concepts" },
+          { text: "Latency", link: "/guide/latency" },
           { text: "The Vault (demo)", link: "/guide/the-vault" },
         ],
       },
