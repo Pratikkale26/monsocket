@@ -20,7 +20,6 @@ import {
   createPublicClient,
   decodeEventLog,
   defineChain,
-  encodeEventTopics,
   encodeFunctionData,
   hexToString,
   http,
@@ -34,6 +33,13 @@ import {
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { ABI } from "./abi.js";
+import {
+  LogStream,
+  ROOM_EVENT_TOPICS,
+  type CommitState,
+  type RealtimeOpts,
+  type StreamLog,
+} from "./realtime.js";
 
 /** The Monsocket contract deployed on Monad testnet. Rooms are open bytes32
  *  topics, so anyone can join this one — or pass their own deployment to
@@ -77,29 +83,43 @@ const GAS_SETSTATE_CREATE = 320_000n;
 const MAX_FEE = 150_000_000_000n; // 150 gwei (min base fee is 100)
 const PRIORITY = 2_000_000_000n;
 const POLL_MS = 250;
-
-/** The three events a room actually consumes, pre-encoded as the topic[0]
- *  alternatives of an eth_getLogs filter. Staked and Refunded are absent on
- *  purpose: the poll never decodes them, so there is no reason to ship them
- *  down the wire. */
-const ROOM_EVENT_TOPICS = (["Presence", "Message", "StateChange"] as const).map(
-  (eventName) => encodeEventTopics({ abi: ABI, eventName })[0],
-);
+/** Cap on the dedupe set. A room seeing more than this many distinct logs
+ *  between evictions is not a room, it is a firehose. */
+const SEEN_MAX = 4096;
 
 export interface PresenceEntry<P> {
   player: string;
   data: P;
   seq: number;
   at: number;
+  /** How settled the block carrying this event was when it was delivered.
+   *  Only present on the realtime path; `undefined` means it came off the
+   *  polling fallback, which reads already-executed state. */
+  commitState?: CommitState;
 }
 type PresenceCb<P> = (e: PresenceEntry<P>) => void;
-type MessageCb<M> = (e: { player: string; name: string; data: M }) => void;
-type StateCb<T> = (e: { player: string; seq: number; state: T }) => void;
+type MessageCb<M> = (e: {
+  player: string;
+  name: string;
+  data: M;
+  commitState?: CommitState;
+}) => void;
+type StateCb<T> = (e: {
+  player: string;
+  seq: number;
+  state: T;
+  commitState?: CommitState;
+}) => void;
 
 export interface ConnectOpts {
   key: Hex; // burner private key — signs every action, no popups
   contract: Hex;
   rpc?: string;
+  /** Opt in to the `monadLogs` subscription instead of the polling read path.
+   *  Roughly halves write→observe. Any failure — no WebSocket available, a
+   *  refused upgrade, a dropped connection — falls back to polling on its own,
+   *  so turning this on cannot make a room stop working. */
+  realtime?: boolean | RealtimeOpts;
 }
 
 export class MonSocket {
@@ -107,16 +127,27 @@ export class MonSocket {
   readonly address: Hex;
   readonly client: PublicClient;
   readonly contract: Hex;
+  /** The shared subscription, or null when this client polls. One socket
+   *  serves every room — several open cabinets are still one connection. */
+  readonly stream: LogStream | null;
   private nonce: number | null = null;
 
   private constructor(opts: ConnectOpts) {
     this.account = privateKeyToAccount(opts.key);
     this.address = this.account.address;
     this.contract = opts.contract;
+    const rpc = opts.rpc ?? monadTestnet.rpcUrls.default.http[0];
     this.client = createPublicClient({
       chain: monadTestnet,
-      transport: http(opts.rpc ?? monadTestnet.rpcUrls.default.http[0]),
+      transport: http(rpc),
     });
+    const rt = opts.realtime;
+    const stream = rt
+      ? new LogStream(opts.contract, rpc, rt === true ? {} : rt)
+      : null;
+    // No WebSocket in this environment is not an error, it is the polling
+    // path — which is exactly what a caller who never asked for realtime got.
+    this.stream = stream?.available ? stream : null;
   }
 
   static connect(opts: ConnectOpts): MonSocket {
@@ -292,6 +323,18 @@ export class Room<T = unknown, P = unknown, M = unknown> {
   private fromBlock: bigint | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private polling = false;
+  /** Set once a callback has asked for events, so the feed starts once. */
+  private started = false;
+  private detachStream: (() => void) | null = null;
+  /** Logs already delivered, keyed by transactionHash:logIndex.
+   *
+   *  Both read paths funnel through here and both need it. The subscription
+   *  republishes each log once per commit state — four copies of every move —
+   *  and a fallback from the socket to the poll re-reads a block the socket
+   *  had already delivered. The key deliberately avoids `blockId`: only the
+   *  subscription supplies one, so it could never match the poll's view of
+   *  the same log. */
+  private seen = new Set<string>();
   /** Has this room's state ever been observed to exist? Until it has, a write
    *  might be the one that creates the room and must carry the cold-path gas
    *  limit — guessing low there doesn't cost less, it reverts. */
@@ -347,7 +390,7 @@ export class Room<T = unknown, P = unknown, M = unknown> {
 
   onPresence(cb: PresenceCb<P>): () => void {
     this.presenceCbs.push(cb);
-    this.ensurePolling();
+    this.ensureFeed();
     return () => void (this.presenceCbs = this.presenceCbs.filter((c) => c !== cb));
   }
 
@@ -355,19 +398,27 @@ export class Room<T = unknown, P = unknown, M = unknown> {
     const entry =
       typeof name === "string" ? { name, cb: cb! } : { name: undefined, cb: name };
     this.messageCbs.push(entry);
-    this.ensurePolling();
+    this.ensureFeed();
     return () => void (this.messageCbs = this.messageCbs.filter((c) => c !== entry));
   }
 
   onStateChange(cb: StateCb<T>): () => void {
     this.stateCbs.push(cb);
-    this.ensurePolling();
+    this.ensureFeed();
     return () => void (this.stateCbs = this.stateCbs.filter((c) => c !== cb));
   }
 
   leave(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
+    this.started = false;
+    this.detachStream?.();
+    this.detachStream = null;
+    this.stopPolling();
+  }
+
+  /** True while this room's events are arriving over the subscription rather
+   *  than the poll. Useful for a status pip; nothing depends on it. */
+  get live(): boolean {
+    return this.detachStream !== null && this.timer === null;
   }
 
   /** After a log gap: pull current truth straight from contract storage
@@ -390,10 +441,40 @@ export class Room<T = unknown, P = unknown, M = unknown> {
     }
   }
 
-  private ensurePolling() {
-    if (this.timer) return;
+  /** Start the read path once, whichever one this client was built with.
+   *
+   *  When a subscription is available the room polls until the socket
+   *  confirms the subscription, then stops. There is no standing safety poll
+   *  behind a healthy socket: it would give back the load this transport
+   *  exists to save, and the socket is probed for liveness instead. The two
+   *  paths only overlap across a transition, which `seen` absorbs. */
+  private ensureFeed() {
+    if (this.started) return;
+    this.started = true;
+    const stream = this.sock.stream;
+    if (!stream) {
+      this.startPolling();
+      return;
+    }
+    // Poll while the subscription is being established so the opening
+    // moments of a room are never dark.
+    this.startPolling();
+    this.detachStream = stream.attach(
+      this.id,
+      (log) => this.handleLog(log, log.commitState),
+      (live) => (live ? this.stopPolling() : this.startPolling()),
+    );
+  }
+
+  private startPolling() {
+    if (this.timer || !this.started) return;
     this.timer = setInterval(() => void this.poll(), POLL_MS);
     void this.poll();
+  }
+
+  private stopPolling() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
   }
 
   /** One getLogs sweep per tick: everything this contract emitted for this
@@ -437,62 +518,92 @@ export class Room<T = unknown, P = unknown, M = unknown> {
         ],
       })) as RpcLog[];
       this.fromBlock = head + 1n;
-      for (const log of logs) {
-        let decoded;
-        try {
-          decoded = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-        } catch {
-          continue;
-        }
-        const args = decoded.args as Record<string, unknown>;
-        // Belt and braces: the topic filter above already pins the room, but
-        // a proxy or RPC that quietly ignores topics must not leak another
-        // room's events into this one's callbacks.
-        if ((args.room as string)?.toLowerCase() !== this.id.toLowerCase()) continue;
-        const player = (args.player as string).toLowerCase();
-        // Raw JSON-RPC hands these back as hex strings, not numbers.
-        // 100k logs/block headroom keeps seq strictly monotonic across blocks
-        const seq =
-          Number(log.blockNumber ?? 0) * 100_000 + Number(log.logIndex ?? 0);
-        const parse = <V,>(hex: Hex): V | null => {
-          try {
-            return JSON.parse(hexToString(hex)) as V;
-          } catch {
-            return null;
-          }
-        };
-        // Each callback is isolated: one throwing subscriber must not eat
-        // the rest of the batch (fromBlock has already advanced past it).
-        const safely = (fn: () => void) => {
-          try {
-            fn();
-          } catch {
-            /* subscriber error — not the transport's problem */
-          }
-        };
-        if (decoded.eventName === "Presence") {
-          const data = parse<P>(args.data as Hex);
-          if (data === null) continue;
-          const entry = { player, data, seq, at: Date.now() };
-          for (const cb of this.presenceCbs) safely(() => cb(entry));
-        } else if (decoded.eventName === "Message") {
-          const data = parse<M>(args.data as Hex);
-          if (data === null) continue;
-          const name = args.name as string;
-          for (const { name: want, cb } of this.messageCbs)
-            if (!want || want === name) safely(() => cb({ player, name, data }));
-        } else if (decoded.eventName === "StateChange") {
-          const state = parse<T>(args.data as Hex);
-          if (state === null) continue;
-          this.stateSeen = true;
-          for (const cb of this.stateCbs)
-            safely(() => cb({ player, seq: Number(args.seq as bigint), state }));
-        }
-      }
+      for (const log of logs) this.handleLog(log);
     } catch {
       /* transient RPC failure — next tick retries; fromBlock unchanged */
     } finally {
       this.polling = false;
+    }
+  }
+
+  /** Decode one log and fan it out. The single place both read paths meet,
+   *  so the subscription and the poll cannot drift apart in what they
+   *  deliver — only in when. */
+  private handleLog(log: RpcLog | StreamLog, commitState?: CommitState) {
+    if (!log.transactionHash || log.logIndex == null) return;
+    // Deduplicate AFTER any commit-state gate upstream, never before: marking
+    // a Proposed copy as seen would swallow the Finalized one that a
+    // certainty-minded subscriber is actually waiting for.
+    const key = `${log.transactionHash}:${log.logIndex}`;
+    if (this.seen.has(key)) return;
+    this.seen.add(key);
+    if (this.seen.size > SEEN_MAX) {
+      // Sets iterate in insertion order, so this drops the oldest quarter.
+      let drop = SEEN_MAX / 4;
+      for (const k of this.seen) {
+        this.seen.delete(k);
+        if (--drop <= 0) break;
+      }
+    }
+
+    // Keep the poll's watermark ahead of anything the socket delivered, so a
+    // dropped connection resumes from where the stream got to rather than
+    // replaying — or worse, skipping — the gap.
+    const block = BigInt(log.blockNumber ?? 0);
+    if (block > 0n && (this.fromBlock === null || block >= this.fromBlock))
+      this.fromBlock = block + 1n;
+
+    let decoded;
+    try {
+      decoded = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+    } catch {
+      return;
+    }
+    const args = decoded.args as Record<string, unknown>;
+    // Belt and braces: the topic filter already pins the room, but a proxy or
+    // RPC that quietly ignores topics must not leak another room's events
+    // into this one's callbacks.
+    if ((args.room as string)?.toLowerCase() !== this.id.toLowerCase()) return;
+    const player = (args.player as string).toLowerCase();
+    // Raw JSON-RPC hands these back as hex strings, not numbers.
+    // 100k logs/block headroom keeps seq strictly monotonic across blocks
+    const seq = Number(log.blockNumber ?? 0) * 100_000 + Number(log.logIndex ?? 0);
+    const parse = <V,>(hex: Hex): V | null => {
+      try {
+        return JSON.parse(hexToString(hex)) as V;
+      } catch {
+        return null;
+      }
+    };
+    // Each callback is isolated: one throwing subscriber must not eat the
+    // rest of the batch (fromBlock has already advanced past it).
+    const safely = (fn: () => void) => {
+      try {
+        fn();
+      } catch {
+        /* subscriber error — not the transport's problem */
+      }
+    };
+    if (decoded.eventName === "Presence") {
+      const data = parse<P>(args.data as Hex);
+      if (data === null) return;
+      const entry = { player, data, seq, at: Date.now(), commitState };
+      for (const cb of this.presenceCbs) safely(() => cb(entry));
+    } else if (decoded.eventName === "Message") {
+      const data = parse<M>(args.data as Hex);
+      if (data === null) return;
+      const name = args.name as string;
+      for (const { name: want, cb } of this.messageCbs)
+        if (!want || want === name)
+          safely(() => cb({ player, name, data, commitState }));
+    } else if (decoded.eventName === "StateChange") {
+      const state = parse<T>(args.data as Hex);
+      if (state === null) return;
+      this.stateSeen = true;
+      for (const cb of this.stateCbs)
+        safely(() =>
+          cb({ player, seq: Number(args.seq as bigint), state, commitState }),
+        );
     }
   }
 }
