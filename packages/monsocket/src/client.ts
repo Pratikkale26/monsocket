@@ -53,12 +53,24 @@ export const monadTestnet = defineChain({
   name: "Monad Testnet",
   nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
   rpcUrls: { default: { http: ["https://testnet-rpc.monad.xyz"] } },
+  contracts: {
+    // Multicall3 at its canonical cross-chain address — verified deployed on
+    // Monad testnet. Lets the lobby read every room in one eth_call.
+    multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" },
+  },
 });
 
 /** Fixed gas limits per action — tuned tight because Monad charges the
  *  limit. Presence/messages are log-only (~26k real); setState touches
  *  storage for a dynamic bytes value. */
-const GAS = {
+/** Every action that costs gas. */
+export type GasAction = "broadcast" | "send" | "setState" | "stake" | "refund";
+
+/** Per-action gas limits. `setStateCreate` is the cold path — the write that
+ *  brings a room into existence. */
+export type GasLimits = Record<GasAction | "setStateCreate", bigint>;
+
+const GAS: Omit<GasLimits, "setStateCreate"> = {
   broadcast: 30_000n,
   send: 36_000n,
   // Writing a room's state for the FIRST time is a different animal from
@@ -80,9 +92,36 @@ const GAS = {
 
 /** Cold-path limit for the write that brings a room into existence. */
 const GAS_SETSTATE_CREATE = 320_000n;
-const MAX_FEE = 150_000_000_000n; // 150 gwei (min base fee is 100)
+
+const DEFAULT_GAS: GasLimits = { ...GAS, setStateCreate: GAS_SETSTATE_CREATE };
+
+/** These limits are right for payloads the size of The Vault's. They are not
+ *  right for everyone: `setState` at 120k covers a measured ~87k warm update
+ *  of a 57-byte state, and an app with a few hundred bytes of shared state
+ *  will exceed it. Monad defers validation, so that transaction is INCLUDED
+ *  and then fails — no throw, no rejected promise, nothing in the console.
+ *  Measure your own payload with `measureGas()` and pass `gas` to connect(). */
+export type GasOverrides = Partial<GasLimits>;
+
 const PRIORITY = 2_000_000_000n;
+
+// --- fees ------------------------------------------------------------------
+// Monad's minimum base fee is 100 gwei. A single hardcoded cap just above it
+// is a cliff: if the base fee ever climbs past it, every write from every
+// client fails at once and the SDK has no way to notice. So the cap tracks
+// the observed base fee, with a floor to stay cheap and a ceiling so a fee
+// spike can never quietly drain a player's burner.
+const FEE_FLOOR = 150_000_000_000n; // 150 gwei — the old fixed value
+const FEE_CEILING = 2_000_000_000_000n; // 2000 gwei — a wall, not a target
+const FEE_MULTIPLIER = 2n; // headroom over base for a few blocks of drift
+const FEE_TTL_MS = 10_000; // how long a sampled base fee is trusted
+
 const POLL_MS = 250;
+// --- polling backoff -------------------------------------------------------
+// A bare retry every 250ms through an RPC outage is how a blip becomes an
+// outage: every client hammers the endpoint four times a second and earns a
+// harder rate limit. Back off, and recover the moment a poll succeeds.
+const BACKOFF_MAX_MS = 8_000;
 /** Cap on the dedupe set. A room seeing more than this many distinct logs
  *  between evictions is not a room, it is a firehose. */
 const SEEN_MAX = 4096;
@@ -111,6 +150,18 @@ type StateCb<T> = (e: {
   commitState?: CommitState;
 }) => void;
 
+/** Something went wrong after a write left the building. */
+export interface MonSocketError {
+  /** `send` — the node rejected the transaction outright.
+   *  `revert` — it was INCLUDED and then failed, which on Monad is a normal
+   *  outcome rather than an exception, and is invisible unless checked. */
+  kind: "send" | "revert";
+  action: GasAction;
+  message: string;
+  hash?: Hex;
+  cause?: unknown;
+}
+
 export interface ConnectOpts {
   key: Hex; // burner private key — signs every action, no popups
   contract: Hex;
@@ -120,7 +171,65 @@ export interface ConnectOpts {
    *  refused upgrade, a dropped connection — falls back to polling on its own,
    *  so turning this on cannot make a room stop working. */
   realtime?: boolean | RealtimeOpts;
+  /** Override the built-in gas limits. Required for any app whose payloads
+   *  are bigger than The Vault's — see `GasOverrides`. */
+  gas?: GasOverrides;
+  /** Called when a write fails, including when it fails *after* being
+   *  included. Without this, a reverted `setState` is silent: the room simply
+   *  never changes and nothing explains why. */
+  onError?: (e: MonSocketError) => void;
+  /** Which actions to check the receipt of. Durable writes are checked by
+   *  default; presence and messages are not, because they cost an extra RPC
+   *  call each and heal on the next beat anyway. */
+  confirm?: Partial<Record<GasAction, boolean>>;
 }
+
+/** Whatever the node actually said, in one line. */
+function errText(err: unknown): string {
+  if (err instanceof Error) return err.message.split("\n")[0];
+  return String(err);
+}
+
+interface KeyValueStore {
+  getItem(k: string): string | null;
+  setItem(k: string, v: string): void;
+  removeItem(k: string): void;
+}
+
+/** localStorage where it exists and is usable. Private-mode browsers throw on
+ *  access rather than simply lacking it, so this is a try, not a check. */
+function safeStorage(): KeyValueStore | null {
+  try {
+    const s = (globalThis as { localStorage?: KeyValueStore }).localStorage;
+    if (!s) return null;
+    s.getItem("monsocket:probe");
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+interface LockManager {
+  request<T>(name: string, cb: () => Promise<T>): Promise<T>;
+}
+
+/** The Web Locks API — a real mutex across a browser's tabs. Absent in Node,
+ *  where a process has no siblings to race with. */
+function webLocks(): LockManager | null {
+  const nav = (globalThis as { navigator?: { locks?: LockManager } }).navigator;
+  return typeof nav?.locks?.request === "function" ? nav.locks : null;
+}
+
+/** Ephemeral traffic heals itself — the next broadcast corrects it, so paying
+ *  a receipt lookup per presence update is a poor trade. A durable write that
+ *  reverts is a different thing: nothing corrects it and nobody is told. */
+const CONFIRM_DEFAULT: Record<GasAction, boolean> = {
+  broadcast: false,
+  send: false,
+  setState: true,
+  stake: true,
+  refund: true,
+};
 
 export class MonSocket {
   readonly account: PrivateKeyAccount;
@@ -130,17 +239,35 @@ export class MonSocket {
   /** The shared subscription, or null when this client polls. One socket
    *  serves every room — several open cabinets are still one connection. */
   readonly stream: LogStream | null;
+  /** The gas limit used per action, after any overrides. */
+  readonly gas: GasLimits;
   private nonce: number | null = null;
+  private readonly onError: ((e: MonSocketError) => void) | undefined;
+  private readonly confirm: Record<GasAction, boolean>;
+  private baseFee = FEE_FLOOR;
+  private baseFeeAt = 0;
+  private baseFeePromise: Promise<void> | null = null;
 
   private constructor(opts: ConnectOpts) {
     this.account = privateKeyToAccount(opts.key);
     this.address = this.account.address;
     this.contract = opts.contract;
+    this.gas = { ...DEFAULT_GAS, ...opts.gas };
+    this.onError = opts.onError;
+    this.confirm = { ...CONFIRM_DEFAULT, ...opts.confirm };
     const rpc = opts.rpc ?? monadTestnet.rpcUrls.default.http[0];
     this.client = createPublicClient({
       chain: monadTestnet,
-      transport: http(rpc),
+      // Batching folds same-tick reads into one HTTP request. `retryCount`
+      // is cut from viem's default of 3 because the read path already
+      // retries: a failed poll changes nothing (fromBlock is untouched) and
+      // the next tick tries again, so transport-level retries only multiply
+      // the load on an endpoint that is already unwell — measured at 4 HTTP
+      // requests per failed poll before this. One retry still covers a blip
+      // on a one-off read like listRoomIds.
+      transport: http(rpc, { batch: true, retryCount: 1 }),
     });
+    void this.refreshBaseFee();
     const rt = opts.realtime;
     const stream = rt
       ? new LogStream(opts.contract, rpc, rt === true ? {} : rt)
@@ -160,50 +287,212 @@ export class MonSocket {
 
   private noncePromise: Promise<number> | null = null;
 
-  /** Hand out the next nonce, serializing the initial fetch — two writes
-   *  racing at startup must never share a nonce (one tx would silently
-   *  drop). */
+  private get nonceKey(): string {
+    return `monsocket:nonce:${this.address.toLowerCase()}`;
+  }
+
+  /** Hand out the next nonce.
+   *
+   *  A single in-memory counter is only correct while it is the only counter.
+   *  It is not: an arcade shares one burner across every cabinet, and two
+   *  browser tabs are two independent counters on one account. They hand out
+   *  the same number, and one of the two transactions is simply lost —
+   *  measured at one write in four under simultaneous load.
+   *
+   *  So the counter is shared through storage and allocation is serialized
+   *  with a cross-tab lock. Where neither exists (Node, or a browser without
+   *  the Locks API) this degrades to the in-memory counter, which is exactly
+   *  right there because there are no other tabs to race.
+   *
+   *  Seeded from `pending` rather than `latest` so a transaction already in
+   *  flight is counted rather than handed out twice. */
   private async nextNonce(): Promise<number> {
-    if (this.nonce === null) {
-      if (!this.noncePromise) {
-        this.noncePromise = this.client
-          .getTransactionCount({ address: this.address, blockTag: "latest" })
-          .finally(() => (this.noncePromise = null));
+    const allocate = async (): Promise<number> => {
+      const store = safeStorage();
+      let next = this.nonce;
+      if (store) {
+        // Read the absence explicitly. `Number(null)` is 0, and 0 is a
+        // perfectly finite nonce — taking it would seed a fresh browser at
+        // zero and have every write rejected.
+        const raw = store.getItem(this.nonceKey);
+        if (raw !== null) {
+          const shared = Number(raw);
+          // Another tab may have moved further ahead than this one has.
+          if (Number.isInteger(shared) && shared >= 0 && (next === null || shared > next))
+            next = shared;
+        }
       }
-      const base = await this.noncePromise;
-      if (this.nonce === null) this.nonce = base;
+      if (next === null) {
+        if (!this.noncePromise) {
+          this.noncePromise = this.client
+            .getTransactionCount({ address: this.address, blockTag: "pending" })
+            .finally(() => (this.noncePromise = null));
+        }
+        next = await this.noncePromise;
+      }
+      this.nonce = next + 1;
+      store?.setItem(this.nonceKey, String(next + 1));
+      return next;
+    };
+    const locks = webLocks();
+    return locks ? locks.request(this.nonceKey, allocate) : allocate();
+  }
+
+  /** Forget the counter everywhere, so the next write reseeds from the
+   *  chain. Both tabs must forget: a stale shared value is worse than none. */
+  private resetNonce() {
+    this.nonce = null;
+    try {
+      safeStorage()?.removeItem(this.nonceKey);
+    } catch {
+      /* storage unavailable — the in-memory reset is enough */
     }
-    return this.nonce++;
+  }
+
+  /** Sample the base fee. Never on the hot path — a write uses the last
+   *  sample and kicks off a refresh if it has gone stale, because adding an
+   *  RPC round trip to every move would cost more latency than the adaptive
+   *  cap is worth. */
+  private async refreshBaseFee(): Promise<void> {
+    if (this.baseFeePromise) return this.baseFeePromise;
+    this.baseFeePromise = (async () => {
+      try {
+        const block = await this.client.getBlock({ blockTag: "latest" });
+        if (block.baseFeePerGas != null) {
+          this.baseFee = block.baseFeePerGas;
+          this.baseFeeAt = Date.now();
+        }
+      } catch {
+        // Keep the previous sample: a stale cap beats no cap.
+      } finally {
+        this.baseFeePromise = null;
+      }
+    })();
+    return this.baseFeePromise;
+  }
+
+  /** What to cap this transaction's fee at. */
+  private feeCap(): bigint {
+    if (Date.now() - this.baseFeeAt > FEE_TTL_MS) void this.refreshBaseFee();
+    const wanted = this.baseFee * FEE_MULTIPLIER + PRIORITY;
+    if (wanted < FEE_FLOOR) return FEE_FLOOR;
+    return wanted > FEE_CEILING ? FEE_CEILING : wanted;
+  }
+
+  private fail(e: MonSocketError) {
+    try {
+      this.onError?.(e);
+    } catch {
+      /* a throwing error handler is not the transport's problem */
+    }
+  }
+
+  /** Estimate what an action really costs with YOUR payload.
+   *
+   *  Monad bills the limit, so this is not a formality: too low reverts
+   *  silently, too high is a permanent tax on every move. The default limits
+   *  are sized for The Vault; anything with a larger shared state must
+   *  measure and pass `gas` to connect().
+   *
+   *      const gas = await sock.measureGas("setState", [roomId, payload])
+   */
+  async measureGas(
+    fn: GasAction,
+    args: readonly unknown[],
+    opts: { value?: bigint; headroom?: number } = {},
+  ): Promise<bigint> {
+    // Cast wholesale: `stake` is payable and the rest are not, so across the
+    // union viem narrows `value` to undefined and the object stops typing.
+    const estimate = await this.client.estimateContractGas({
+      address: this.contract,
+      abi: ABI,
+      functionName: fn,
+      args,
+      account: this.account,
+      value: opts.value ?? 0n,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const pct = BigInt(Math.round((opts.headroom ?? 0.1) * 100));
+    return estimate + (estimate * pct) / 100n;
   }
 
   /** Sign + fire one contract call using the local nonce counter. Returns
    *  the tx hash without waiting for inclusion — realtime writes are
-   *  fire-and-forget; the log stream is the acknowledgement. */
+   *  fire-and-forget; the log stream is the acknowledgement.
+   *
+   *  Inclusion is not success. Monad validates late, so a transaction can be
+   *  mined and still have reverted; durable actions therefore have their
+   *  receipt checked in the background and report through `onError`. */
   async write(
-    fn: "broadcast" | "send" | "setState" | "stake" | "refund",
+    fn: GasAction,
     args: readonly unknown[],
     value = 0n,
     gas?: bigint,
   ): Promise<Hex> {
-    const nonce = await this.nextNonce();
-    const serialized = await this.account.signTransaction({
-      to: this.contract,
-      value,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data: encodeFunctionData({ abi: ABI, functionName: fn, args: args as any }),
-      nonce,
-      gas: gas ?? GAS[fn],
-      maxFeePerGas: MAX_FEE,
-      maxPriorityFeePerGas: PRIORITY,
-      chainId: monadTestnet.id,
-      type: "eip1559",
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = encodeFunctionData({ abi: ABI, functionName: fn, args: args as any });
+    const limit = gas ?? this.gas[fn];
+
+    const send = async (): Promise<Hex> => {
+      const serialized = await this.account.signTransaction({
+        to: this.contract,
+        value,
+        data,
+        nonce: await this.nextNonce(),
+        gas: limit,
+        maxFeePerGas: this.feeCap(),
+        maxPriorityFeePerGas: PRIORITY,
+        chainId: monadTestnet.id,
+        type: "eip1559",
+      });
+      return this.client.sendRawTransaction({ serializedTransaction: serialized });
+    };
+
+    let hash: Hex;
     try {
-      return await this.client.sendRawTransaction({ serializedTransaction: serialized });
+      hash = await send();
     } catch (err) {
-      // Nonce drift (dropped tx, parallel tab) — resync once and surface.
-      this.nonce = null;
-      throw err;
+      // Nonce drift — a dropped transaction, or the other tab got there
+      // first. Resync and retry exactly once: the second failure is real,
+      // and an unbounded retry on a shared burner is a loop.
+      this.resetNonce();
+      try {
+        hash = await send();
+      } catch (err2) {
+        this.resetNonce();
+        this.fail({
+          kind: "send",
+          action: fn,
+          message: `${fn} was rejected: ${errText(err2)}`,
+          cause: err2 ?? err,
+        });
+        throw err2;
+      }
+    }
+    if (this.confirm[fn]) void this.checkReceipt(hash, fn);
+    return hash;
+  }
+
+  /** Watch a durable write land, and say so if it landed badly. */
+  private async checkReceipt(hash: Hex, action: GasAction) {
+    try {
+      const receipt = await this.client.waitForTransactionReceipt({
+        hash,
+        timeout: 60_000,
+      });
+      if (receipt.status === "success") return;
+      this.fail({
+        kind: "revert",
+        action,
+        hash,
+        message:
+          `${action} was included but reverted. The usual cause is a gas ` +
+          `limit too low for the payload — Monad bills the limit and ` +
+          `validates late, so this fails silently. Try measureGas("${action}", …).`,
+      });
+    } catch {
+      // Never seeing a receipt is not the same as reverting — the log stream
+      // is still the source of truth, so this stays quiet.
     }
   }
 
@@ -212,7 +501,14 @@ export class MonSocket {
     return keccak256(toBytes(name));
   }
 
-  /** Lobby index: the last `limit` rooms ever created, newest first. */
+  /** Lobby index: the last `limit` rooms ever created, newest first.
+   *
+   *  One `eth_call` through Multicall3, not one per room. Awaiting inside a
+   *  loop made this 25 sequential round-trips for 24 rooms — the hub's load
+   *  time and the leaderboard's. Firing them concurrently instead is worse,
+   *  not better: the public RPC limits requests to 15/sec and a burst trips
+   *  it outright. Aggregating on-chain is the only version that is both fast
+   *  and polite. */
   async listRoomIds(limit = 24): Promise<Hex[]> {
     const count = Number(
       (await this.client.readContract({
@@ -223,18 +519,38 @@ export class MonSocket {
       })) as bigint,
     );
     const from = Math.max(0, count - limit);
-    const ids: Hex[] = [];
-    for (let i = count - 1; i >= from; i--) {
-      ids.push(
-        (await this.client.readContract({
-          address: this.contract,
-          abi: ABI,
-          functionName: "rooms",
-          args: [BigInt(i)],
-        })) as Hex,
-      );
+    const indices: bigint[] = [];
+    for (let i = count - 1; i >= from; i--) indices.push(BigInt(i));
+    if (indices.length === 0) return [];
+
+    const calls = indices.map((i) => ({
+      address: this.contract,
+      abi: ABI,
+      functionName: "rooms" as const,
+      args: [i] as const,
+    }));
+    try {
+      const results = await this.client.multicall({
+        contracts: calls,
+        allowFailure: false,
+      });
+      return results as Hex[];
+    } catch {
+      // No Multicall3 on this deployment. Fall back to reading them one at a
+      // time — slow, but rate-limit safe, which concurrency would not be.
+      const ids: Hex[] = [];
+      for (const i of indices) {
+        ids.push(
+          (await this.client.readContract({
+            address: this.contract,
+            abi: ABI,
+            functionName: "rooms",
+            args: [i],
+          })) as Hex,
+        );
+      }
+      return ids;
     }
-    return ids;
   }
 
   /** Read any room's shared state without joining — no tx, no membership. */
@@ -304,13 +620,18 @@ export class MonSocket {
     const room = new Room<T, P, M>(this, this.roomId(name), name);
     const existing = await room.getState();
     if (existing === null && opts.initialState !== undefined && !opts.readOnly) {
-      // Bringing the room into existence — the expensive cold write.
-      void this.write(
+      // Bringing the room into existence — the expensive cold write. This is
+      // the one write a player cannot recover from silently: if it fails they
+      // are sitting in a room that does not exist, so it reports rather than
+      // being dropped on the floor.
+      this.write(
         "setState",
         [room.id, stringToHex(JSON.stringify(opts.initialState))],
         0n,
-        GAS_SETSTATE_CREATE,
-      );
+        this.gas.setStateCreate,
+      ).catch(() => {
+        /* already reported through onError by write() */
+      });
     }
     return room;
   }
@@ -323,6 +644,10 @@ export class Room<T = unknown, P = unknown, M = unknown> {
   private fromBlock: bigint | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private polling = false;
+  /** Consecutive failed polls, and the time before which not to try again.
+   *  Without this the fixed interval retries straight through an outage. */
+  private failures = 0;
+  private backoffUntil = 0;
   /** Set once a callback has asked for events, so the feed starts once. */
   private started = false;
   private detachStream: (() => void) | null = null;
@@ -366,7 +691,7 @@ export class Room<T = unknown, P = unknown, M = unknown> {
       "setState",
       [this.id, stringToHex(JSON.stringify(data))],
       0n,
-      this.stateSeen ? undefined : GAS_SETSTATE_CREATE,
+      this.stateSeen ? undefined : this.sock.gas.setStateCreate,
     );
     this.stateSeen = true;
   }
@@ -482,6 +807,7 @@ export class Room<T = unknown, P = unknown, M = unknown> {
    *  block, so this reads state ~one block ahead of finality. */
   private async poll() {
     if (this.polling) return;
+    if (Date.now() < this.backoffUntil) return;
     this.polling = true;
     try {
       const head = await this.sock.client.getBlockNumber({ cacheTime: 0 });
@@ -519,8 +845,16 @@ export class Room<T = unknown, P = unknown, M = unknown> {
       })) as RpcLog[];
       this.fromBlock = head + 1n;
       for (const log of logs) this.handleLog(log);
+      // One good sweep clears the debt — an outage should cost latency while
+      // it lasts, not afterwards.
+      this.failures = 0;
+      this.backoffUntil = 0;
     } catch {
-      /* transient RPC failure — next tick retries; fromBlock unchanged */
+      // Transient RPC failure. fromBlock is unchanged, so nothing is missed;
+      // the only question is how hard to push while the endpoint is unwell.
+      this.failures++;
+      const wait = Math.min(POLL_MS * 2 ** this.failures, BACKOFF_MAX_MS);
+      this.backoffUntil = Date.now() + wait;
     } finally {
       this.polling = false;
     }

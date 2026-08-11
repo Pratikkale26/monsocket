@@ -24,6 +24,10 @@ export {
   monadTestnet,
   smoothPresence,
   type ConnectOpts,
+  type GasAction,
+  type GasLimits,
+  type GasOverrides,
+  type MonSocketError,
   type PresenceEntry,
 } from "./client.js";
 
