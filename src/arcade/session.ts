@@ -34,11 +34,20 @@ export function exportBurnerKey(): string {
   return loadBurnerKey();
 }
 
-/** The one client every cabinet shares. */
+/** The one client every cabinet shares.
+ *
+ *  `realtime` puts the read path on Monad's speculative `monadLogs`
+ *  subscription instead of the 250ms poll: measured against the live
+ *  contract, write→observe drops from a median of 1666ms to 781ms. One
+ *  socket serves every cabinet. If the browser cannot open it, or it drops
+ *  mid-game, each room falls back to polling on its own and recovers when
+ *  the socket returns — so the worst case here is the arcade we had
+ *  yesterday. */
 export const sock = MonSocket.connect({
   key: loadBurnerKey(),
   contract: CONTRACT,
   rpc: RPC_URL,
+  realtime: true,
 });
 
 export const address = sock.address;
