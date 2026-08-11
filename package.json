@@ -16,7 +16,7 @@
     "preview": "vite preview",
     "compile": "node scripts/compile.mjs",
     "deploy": "node scripts/deploy.mjs",
-    "test": "node --experimental-strip-types tests/logic.ts"
+    "test": "pnpm run build:sdk && node --experimental-strip-types tests/logic.ts && node --experimental-strip-types --no-network-family-autoselection tests/transport.ts"
   },
   "dependencies": {
     "monsocket": "workspace:*",
