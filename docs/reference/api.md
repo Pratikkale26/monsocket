@@ -8,7 +8,9 @@ Everything lives in `packages/monsocket/src` (client, viem-based) and
 
 | method | description |
 |---|---|
-| `MonSocket.connect({ key, contract, rpc?, realtime? })` | Create a client from a burner private key, contract address, and RPC URL. No network calls yet. `realtime` opts into the `monadLogs` subscription — see below. |
+| `MonSocket.connect({ key, contract, rpc?, realtime?, gas?, onError?, confirm? })` | Create a client from a burner private key, contract address, and RPC URL. No network calls yet. See [realtime](#realtime-monadlogs) and [gas & errors](#gas-and-errors). |
+| `sock.measureGas(action, args, { value?, headroom? })` | Estimate what an action costs **with your payload**. Required reading if your shared state is larger than a few dozen bytes. |
+| `sock.gas` | The limits in force, after overrides. |
 | `sock.address` | The burner's address — your player identity. |
 | `sock.balance()` | Burner balance in wei. |
 | `sock.roomId(name)` | `keccak256(name)` — same name → same room id on every client. |
@@ -80,6 +82,51 @@ Three things worth knowing:
 | `setState(room, data)` | Stores state, bumps `stateSeq`, emits `StateChange`; first writer is recorded in `roomCreator` and the room joins `rooms[]`. |
 | `stake(room)` payable / `refund(room)` | v1 pot escrow — self-refund only. Emits `Staked` / `Refunded`. |
 | `roomState` / `stateSeq` / `roomCreator` / `rooms` / `roomCount()` / `pot` / `stakeOf` | Public reads — free for anyone, including spectators. |
+
+## Gas and errors
+
+### Measure your own payload
+
+The built-in limits are sized for The Vault's 57-byte shared state. They are
+**not** a safe default for a bigger one. `setState` is capped at 120,000 gas;
+a 600-byte state measures **808,817**. Monad validates late, so exceeding the
+limit does not throw — the transaction is *included* and then fails, and
+nothing tells you. The room simply stops updating.
+
+```ts
+const gas = await sock.measureGas("setState", [roomId, payload])
+const sock2 = MonSocket.connect({ key, contract, gas: { setState: gas } })
+```
+
+| override key | when |
+|---|---|
+| `broadcast`, `send` | presence or message payloads larger than a cursor |
+| `setState` | **any** shared state bigger than a few dozen bytes |
+| `setStateCreate` | the cold write that creates a room — pays cold storage plus a registry push |
+| `stake`, `refund` | rarely |
+
+### Hear about failures
+
+```ts
+MonSocket.connect({
+  key, contract,
+  onError: (e) => console.warn(e.kind, e.action, e.message),
+})
+```
+
+`kind: "send"` is a rejected transaction. `kind: "revert"` is the Monad-shaped
+one — included, then failed. Durable writes (`setState`, `stake`, `refund`)
+are confirmed in the background by default; `broadcast` and `send` are not,
+since they cost a receipt lookup each and the next update corrects them. Flip
+either with `confirm`.
+
+### One wallet, several tabs
+
+Sharing a burner across cabinets means two open tabs are two nonce counters on
+one account, and a collision loses a transaction silently. The client shares
+its counter through `localStorage` and serializes allocation with the Web
+Locks API, so tabs cannot hand out the same nonce. Nothing to configure; in
+Node, where there are no other tabs, it uses a plain in-memory counter.
 
 ## Gas limits (billed on Monad!)
 
