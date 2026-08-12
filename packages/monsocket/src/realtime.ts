@@ -3,7 +3,8 @@
  *
  * `monadLogs` publishes a log as soon as the node has speculatively executed
  * the block, roughly a second before the same log is readable by `eth_getLogs`
- * — measured against the live contract at a median of 781ms vs 1666ms.
+ * — measured against the live contract over 12 samples at a median of 889ms
+ * vs 1524ms, both paths watching the same transaction.
  *
  * Three properties of the stream shape everything here:
  *

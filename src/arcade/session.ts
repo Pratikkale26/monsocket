@@ -38,7 +38,8 @@ export function exportBurnerKey(): string {
  *
  *  `realtime` puts the read path on Monad's speculative `monadLogs`
  *  subscription instead of the 250ms poll: measured against the live
- *  contract, write→observe drops from a median of 1666ms to 781ms. One
+ *  contract over 12 samples, write→observe drops from a median of 1524ms to
+ *  889ms. One
  *  socket serves every cabinet. If the browser cannot open it, or it drops
  *  mid-game, each room falls back to polling on its own and recovers when
  *  the socket returns — so the worst case here is the arcade we had
@@ -48,6 +49,11 @@ export const sock = MonSocket.connect({
   contract: CONTRACT,
   rpc: RPC_URL,
   realtime: true,
+  // Room ids are otherwise one global namespace shared with every other app
+  // on this contract: their "lobby" and ours are the same room. Tagging ours
+  // is also what lets the floor tell a vault in progress from somebody else's
+  // room without reading each one's state to find out.
+  app: "coinop",
 });
 
 export const address = sock.address;

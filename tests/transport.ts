@@ -471,6 +471,127 @@ console.log("\nRoom — backoff recovers the moment the RPC does");
 }
 
 // ===========================================================================
+console.log("\nMonSocket — app namespacing");
+// ===========================================================================
+{
+  const plain = MonSocket.connect({ key: KEY, contract: CONTRACT, rpc: "http://127.0.0.1:1/" });
+  const vault = MonSocket.connect({
+    key: KEY,
+    contract: CONTRACT,
+    rpc: "http://127.0.0.1:1/",
+    app: "coinop",
+  });
+  const other = MonSocket.connect({
+    key: KEY,
+    contract: CONTRACT,
+    rpc: "http://127.0.0.1:1/",
+    app: "someone-else",
+  });
+
+  // The whole point: the same name is a different room in a different app.
+  ok(
+    vault.roomId("lobby") !== other.roomId("lobby"),
+    "the same room name in two apps is two different rooms",
+  );
+  ok(
+    vault.roomId("lobby") === vault.roomId("lobby"),
+    "the same app and name is the same room on every client",
+  );
+
+  // Adding the option must not move anyone's existing rooms.
+  ok(
+    plain.roomId("lobby") === keccak256(toBytes("lobby")),
+    "without an app, ids are keccak(name) exactly as before",
+  );
+  ok(
+    plain.roomId("lobby") !== vault.roomId("lobby"),
+    "namespacing a client moves its rooms — the reason it is opt-in",
+  );
+
+  // Attribution without an RPC call: this is what makes discovery work.
+  ok(vault.ownsRoom(vault.roomId("lobby")), "an app recognises its own room id");
+  ok(
+    !vault.ownsRoom(other.roomId("lobby")),
+    "an app does not claim another app's room id",
+  );
+  ok(
+    !vault.ownsRoom(plain.roomId("lobby")),
+    "an app does not claim an unnamespaced room id",
+  );
+  ok(
+    !plain.ownsRoom(plain.roomId("lobby")),
+    "a client with no app claims nothing — an unnamespaced id carries no attribution",
+  );
+
+  // Injectivity, checked where it can actually fail.
+  //
+  // ("a", "b|c") and ("a|b", "c") flatten to the same bytes under a plain
+  // `app + "|" + name` concatenation. The full ids still differ under either
+  // derivation, because the app tags differ — so comparing whole ids proves
+  // nothing about the hashing. The room half is where a naive concatenation
+  // actually collides, so that is what this compares.
+  const l = MonSocket.connect({
+    key: KEY, contract: CONTRACT, rpc: "http://127.0.0.1:1/", app: "a",
+  });
+  const r = MonSocket.connect({
+    key: KEY, contract: CONTRACT, rpc: "http://127.0.0.1:1/", app: "a|b",
+  });
+  const roomHalf = (id: Hex) => id.slice(2 + 16); // drop 0x and the 8-byte tag
+  ok(
+    roomHalf(l.roomId("b|c")) !== roomHalf(r.roomId("c")),
+    "the separator cannot be smuggled across the app/name boundary",
+  );
+
+  ok(vault.roomId("lobby").length === 66, "a namespaced id is still one bytes32");
+}
+
+// ===========================================================================
+console.log("\nMonSocket — a room entered by id, with no name to hash");
+// ===========================================================================
+{
+  FakeSocket.instances = [];
+  const rpc = await fakeRpc((method) => {
+    if (method === "eth_blockNumber") return "0x64";
+    if (method === "eth_getLogs") return [];
+    if (method === "eth_getBlockByNumber") return { baseFeePerGas: "0x174876e800", number: "0x64" };
+    if (method === "eth_call") return "0x";
+    return undefined;
+  });
+  const sock = MonSocket.connect({
+    key: KEY,
+    contract: CONTRACT,
+    rpc: rpc.url,
+    realtime: { WebSocketImpl: FakeSocket as unknown as new (u: string) => WebSocketLike },
+  });
+
+  // A room discovered from the registry or from its own logs is known only by
+  // id — `roomId()` is a keccak, so the name is genuinely unrecoverable.
+  const watched = sock.watchRoom(ROOM_A);
+  ok(watched.id === ROOM_A, "watchRoom binds the room to the id it was given");
+  ok(watched.name === "", "a room entered by id has no name to report");
+  // Proof it takes the id as given rather than hashing it: hashing ROOM_A as
+  // if it were a name lands somewhere else entirely.
+  ok(
+    sock.roomId(ROOM_A) !== ROOM_A && watched.id === ROOM_A,
+    "the id is used as given, not re-hashed as if it were a name",
+  );
+
+  // It has to be a real room, not an inert handle: the whole point is that a
+  // spectator sees the game.
+  const seen: unknown[] = [];
+  watched.onPresence((e) => seen.push(e));
+  const ws = FakeSocket.instances[0];
+  ws.open();
+  const [r] = ws.subscribeRequests() as { id: number }[];
+  ws.confirmSubscribe(r.id, "0xs");
+  await until(() => watched.live, 2000, "the watched room to go live");
+  ws.notify("0xs", presenceLog(ROOM_A, PLAYER, { x: 5 }));
+  ok(seen.length === 1, "a room entered by id still receives presence");
+
+  await rpc.close();
+}
+
+// ===========================================================================
 console.log("\nMonSocket — gas limits");
 // ===========================================================================
 {

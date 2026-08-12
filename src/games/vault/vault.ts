@@ -174,6 +174,27 @@ export type VaultState = {
   start: number; // ms timestamp: this level's clock
   run: number; // ms timestamp: the whole run's clock (set once, level 0)
 };
+
+/** Whatever another app (or a griefer) wrote into this room id must never
+ *  crash the game — only adopt states that actually look like a vault.
+ *
+ *  Room ids are a global namespace shared by every app on the contract, so
+ *  this is also how the floor tells a vault in progress from someone else's
+ *  room entirely. It has to live here rather than in the component: the hub
+ *  needs it without pulling the whole game in. */
+export function isVaultState(s: unknown): s is VaultState {
+  if (!s || typeof s !== "object") return false;
+  const v = s as Record<string, unknown>;
+  return (
+    typeof v.level === "number" &&
+    v.level >= 0 &&
+    v.level < LEVELS.length &&
+    typeof v.doors === "number" &&
+    typeof v.keyA === "number" &&
+    typeof v.keyB === "number" &&
+    typeof v.run === "number"
+  );
+}
 export const DOOR1 = 1; // stage 1 solved (plates / valves / bridge buttons)
 export const LOCK1 = 2; // joiner's stage-2 task (keypad k / fuel cell U / breaker b)
 export const LOCK2 = 4; // creator's stage-2 task (keypad K / fuel cell u / breaker a)

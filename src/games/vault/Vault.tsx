@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatEther, parseEther } from "viem";
+import { formatEther, parseEther, type Hex } from "viem";
 import { PresenceEntry, Room, smoothPresence } from "monsocket";
 import { CONTRACT } from "../../lib/deployment";
 import {
@@ -21,6 +21,7 @@ import {
   drawVault,
   sceneLights,
   isFinal,
+  isVaultState,
   levelOf,
   near,
   pulseOpen,
@@ -41,8 +42,18 @@ type Vault = Room<VaultState, Player, ChatMsg>;
 // world name, e.g. vault-x7f3k2 (empty string normalized to null — a
 // truncated link must not silently make someone a "creator")
 let joinTarget = params.get("room") || null;
-/** ?watch=1 — spectate: reading a room is free on Monad, no tx, no funds. */
-const watchMode = params.get("watch") === "1" && joinTarget !== null;
+/** Spectating arrives two ways, and reading a room is free either way — no
+ *  transaction, no funds, no membership.
+ *
+ *  `?room=NAME&watch=1` is the link one player sends a friend.
+ *  `?watch=0x<roomId>` is how the floor sends you into a room it found for
+ *  itself. It has to be an id: room ids are `keccak(name)` and the chain
+ *  never publishes the name, so a room discovered from the registry or from
+ *  its own logs is a room whose name is genuinely unknowable. */
+const watchParam = params.get("watch");
+const watchById =
+  watchParam && /^0x[0-9a-fA-F]{64}$/.test(watchParam) ? (watchParam as Hex) : null;
+const watchMode = watchById !== null || (watchParam === "1" && joinTarget !== null);
 
 /* ──────────────────────────────────────────────────────────────────────────
  * The realtime integration: presence broadcasts for the two players, shared
@@ -51,23 +62,15 @@ const watchMode = params.get("watch") === "1" && joinTarget !== null;
  * ────────────────────────────────────────────────────────────────────────── */
 const FRESH_VAULT: VaultState = { level: 0, doors: 0, keyA: 0, keyB: 0, start: 0, run: 0 };
 
-/** Whatever another app (or a griefer) wrote into this room id must never
- *  crash the game — only adopt states that actually look like a vault. */
-function isVaultState(s: unknown): s is VaultState {
-  if (!s || typeof s !== "object") return false;
-  const v = s as Record<string, unknown>;
-  return (
-    typeof v.level === "number" &&
-    v.level >= 0 &&
-    v.level < LEVELS.length &&
-    typeof v.doors === "number" &&
-    typeof v.keyA === "number" &&
-    typeof v.keyB === "number" &&
-    typeof v.run === "number"
-  );
-}
-
 async function goLive(): Promise<Vault> {
+  if (watchById) {
+    // Entered by id: there is no name to hash, nothing to create and nothing
+    // to seed. `watchRoom` cannot write, which is exactly the guarantee a
+    // spectator wants — they arrived at someone else's game.
+    const room = sock.watchRoom<VaultState, Player, ChatMsg>(watchById);
+    history.replaceState(null, "", `${location.pathname}?watch=${watchById}`);
+    return room;
+  }
   const name =
     joinTarget ?? `vault-${Math.random().toString(36).slice(2, 8)}`;
   const room = await sock.joinOrCreate<VaultState, Player, ChatMsg>(name, {

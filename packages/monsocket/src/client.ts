@@ -17,6 +17,7 @@
  * nothing and needs no funded wallet.
  */
 import {
+  concat,
   createPublicClient,
   decodeEventLog,
   defineChain,
@@ -25,6 +26,7 @@ import {
   http,
   keccak256,
   numberToHex,
+  slice,
   stringToHex,
   toBytes,
   type Hex,
@@ -182,6 +184,40 @@ export interface ConnectOpts {
    *  default; presence and messages are not, because they cost an extra RPC
    *  call each and heal on the next beat anyway. */
   confirm?: Partial<Record<GasAction, boolean>>;
+  /** Namespace this client's rooms to an app.
+   *
+   *  Without it, room ids are `keccak(name)` in one global namespace shared by
+   *  every app on the contract: your "lobby" and everyone else's are the same
+   *  room. With it, ids carry an 8-byte tag derived from the app string, so
+   *  two apps can both have a "lobby" and either one can tell its own rooms
+   *  apart from the rest of the floor — see `ownsRoom`.
+   *
+   *  Opt-in because it changes room ids: switching an existing app to `app`
+   *  orphans its rooms and any links already shared into them. */
+  app?: string;
+}
+
+/** Rooms are namespaced by tagging the id, not by hashing app and name
+ *  together into an opaque digest.
+ *
+ *  The difference matters for discovery. `listRoomIds` and the event logs both
+ *  hand back ids and nothing else, so with an opaque digest a client still
+ *  cannot tell which of the rooms it just found are its own — the collision is
+ *  gone but the lobby is no more useful than before. A recoverable tag makes
+ *  attribution a prefix comparison with no extra RPC call.
+ *
+ *  The app is hashed whole, at fixed length, ahead of the name, so the room
+ *  half is injective in (app, name): `("a", "b|c")` and `("a|b", "c")` flatten
+ *  to identical bytes under a plain `app + "|" + name` concatenation and would
+ *  share a room hash. Two whole ids would still differ there — the tags do
+ *  that much on their own — but relying on the tag to cover a derivation that
+ *  collides is a load-bearing accident, and it stops being true the moment
+ *  anything reads the room half by itself. */
+const APP_TAG_BYTES = 8;
+
+function appTagOf(app: string): { full: Hex; tag: Hex } {
+  const full = keccak256(toBytes(app));
+  return { full, tag: slice(full, 0, APP_TAG_BYTES) };
 }
 
 /** Whatever the node actually said, in one line. */
@@ -235,6 +271,10 @@ export class MonSocket {
   readonly account: PrivateKeyAccount;
   readonly address: Hex;
   readonly client: PublicClient;
+  /** The app this client's rooms are namespaced to, or null for the shared
+   *  global namespace. */
+  readonly app: string | null;
+  private readonly appTag: { full: Hex; tag: Hex } | null;
   readonly contract: Hex;
   /** The shared subscription, or null when this client polls. One socket
    *  serves every room — several open cabinets are still one connection. */
@@ -253,6 +293,8 @@ export class MonSocket {
     this.address = this.account.address;
     this.contract = opts.contract;
     this.gas = { ...DEFAULT_GAS, ...opts.gas };
+    this.app = opts.app ?? null;
+    this.appTag = opts.app ? appTagOf(opts.app) : null;
     this.onError = opts.onError;
     this.confirm = { ...CONFIRM_DEFAULT, ...opts.confirm };
     const rpc = opts.rpc ?? monadTestnet.rpcUrls.default.http[0];
@@ -496,9 +538,31 @@ export class MonSocket {
     }
   }
 
-  /** Same room name → same room id, on every client. */
+  /** Same room name → same room id, on every client.
+   *
+   *  Namespaced when the client was given an `app`: the id becomes an 8-byte
+   *  app tag followed by 24 bytes of room hash, so "lobby" in one app and
+   *  "lobby" in another are different rooms — and either app can recognise
+   *  its own ids on sight. Unnamespaced clients keep `keccak(name)` exactly
+   *  as before, which is what makes the option safe to add. */
   roomId(name: string): Hex {
-    return keccak256(toBytes(name));
+    if (!this.appTag) return keccak256(toBytes(name));
+    const inner = keccak256(concat([this.appTag.full, stringToHex(name)]));
+    return concat([this.appTag.tag, slice(inner, 0, 32 - APP_TAG_BYTES)]);
+  }
+
+  /** Does this room id belong to this client's app?
+   *
+   *  The tag is a claim, not a permission: the namespace stays open, and
+   *  anyone can construct ids under any app string. Treat this as "worth
+   *  looking at" when sifting discovered rooms, then validate the room's
+   *  state before trusting it — the same way you would any other input.
+   *
+   *  Always false without an `app`, because an unnamespaced id carries no
+   *  attribution at all — there is nothing in it to recognise. */
+  ownsRoom(roomId: Hex): boolean {
+    if (!this.appTag) return false;
+    return slice(roomId, 0, APP_TAG_BYTES).toLowerCase() === this.appTag.tag.toLowerCase();
   }
 
   /** Lobby index: the last `limit` rooms ever created, newest first.
@@ -634,6 +698,20 @@ export class MonSocket {
       });
     }
     return room;
+  }
+
+  /** Watch a room you only know the id of.
+   *
+   *  `listRoomIds` and the event logs both hand back ids, never names, and
+   *  `roomId()` is a keccak — there is no way back. So without this, a room
+   *  you discovered is a room you cannot open: `joinOrCreate` needs the name
+   *  nobody published. Spectating is free and needs no membership, so an id
+   *  is genuinely enough.
+   *
+   *  Read-only by construction, not by convention: `name` is empty, and a
+   *  write would be sent under an id whose name this client never knew. */
+  watchRoom<T, P, M>(roomId: Hex): Room<T, P, M> {
+    return new Room<T, P, M>(this, roomId, "");
   }
 }
 
