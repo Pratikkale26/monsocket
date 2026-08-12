@@ -1,6 +1,6 @@
 {
   "name": "monsocket",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Socket.io for Monad — realtime multiplayer rooms, presence, broadcast and shared state where every action is an onchain transaction",
   "license": "MIT",
   "author": "Pratik Kale",

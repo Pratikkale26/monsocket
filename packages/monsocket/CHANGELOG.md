@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — 2026-08-12
+
+Documentation only — no code change, no behaviour change.
+
+- The README no longer cross-references a sibling project. monsocket is its
+  own thing and reads better as one.
+- The module header still described the 250ms poll as the read path, which
+  stopped being true in 0.2.0.
+
 ## 0.2.0 — 2026-08-12
 
 The read path stopped polling, and the write path stopped failing quietly.
