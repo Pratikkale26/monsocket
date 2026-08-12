@@ -72,9 +72,3 @@ SDKs but with receipts. Spectating is free because reading a chain costs
 nothing. Session keys are throwaway burners that only ever sign game
 actions.
 
-## Sibling project
-
-monsocket shares its API with [solsocket](https://github.com/Pratikkale26/solsocket) —
-the same rooms/broadcast/subscribe surface on **Solana**, where MagicBlock
-ephemeral rollups make every realtime transaction zero-fee at ~50ms slots.
-One API, two chains, different physics.

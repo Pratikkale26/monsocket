@@ -1,13 +1,13 @@
 /**
  * monsocket — Socket.io for Monad.
  *
- * The same rooms/broadcast/subscribe API as solsocket (its Solana sibling),
- * re-based on a Monad L1 transport:
+ * A rooms/broadcast/subscribe API on a Monad L1 transport:
  *  - writes: raw EIP-1559 transactions signed locally by a burner key with a
- *    LOCAL nonce counter and fixed gas limits (Monad bills gas_limit, not
+ *    LOCAL nonce counter and measured gas limits (Monad bills gas_limit, not
  *    gas_used — padding is real money), fired without simulation.
- *  - reads: one getLogs poll per room per ~250ms against `latest`, which on
- *    Monad is PROPOSED state — speculative, one block ahead of finality.
+ *  - reads: the `monadLogs` subscription when `realtime` is on, falling back
+ *    to a getLogs poll against `latest` — which on Monad is PROPOSED state,
+ *    speculative and one block ahead of finality.
  *    The filter is applied at the node (room id is an indexed topic), so a
  *    client never downloads other rooms' traffic.
  *  - rooms are open bytes32 topics; presence and messages live purely in
@@ -944,7 +944,7 @@ export class Room<T = unknown, P = unknown, M = unknown> {
 
 /** Entity interpolation: buffers each player's last two presence samples and
  *  renders the roster at (now - delayMs), turning ~1-2Hz onchain broadcasts
- *  into smooth 60fps movement. Direct port of solsocket's smoothPresence. */
+ *  into smooth 60fps movement. */
 export function smoothPresence<P extends Record<string, unknown>>(
   room: { onPresence(cb: (e: PresenceEntry<P>) => void): () => void },
   render: (players: ReadonlyMap<string, PresenceEntry<P>>) => void,

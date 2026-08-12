@@ -35,7 +35,7 @@ features:
   - icon: 🏦
     title: Onchain lobby & stakes
     details: Every room registers itself onchain — leaderboards read straight off the contract. A v1 stake escrow lets players put MON in the pot (self-refund only, rug-proof by construction).
-  - icon: 🔁
-    title: One API, two chains
-    details: monsocket is the Monad sibling of solsocket — the same rooms/broadcast/subscribe API running on Solana at ~50ms via MagicBlock ephemeral rollups.
+  - icon: ⚡
+    title: Streams, doesn't poll
+    details: Reads come off monadLogs, Monad's speculative log subscription — write→observe drops from a 1524ms median to 889ms, and from 4198ms to 1710ms at the worst sample. Opt-in, and it falls back to polling on its own if the socket dies.
 ---

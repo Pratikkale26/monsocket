@@ -1,8 +1,15 @@
 /** Tiny WebAudio synth — every sound is generated, no asset files.
  *  The AudioContext is created lazily on the first user gesture. */
 
+const MUTE_KEY = "monsocket-escape:muted";
+/** The key used to be prefixed differently. Read the old one once so nobody
+ *  who muted the arcade gets sound back on their next visit. */
+const LEGACY_MUTE_KEY = "solsocket-escape:muted";
+
 let ctx: AudioContext | null = null;
-let muted = localStorage.getItem("solsocket-escape:muted") === "1";
+let muted =
+  (localStorage.getItem(MUTE_KEY) ?? localStorage.getItem(LEGACY_MUTE_KEY)) ===
+  "1";
 
 function ac(): AudioContext | null {
   if (muted) return null;
@@ -19,7 +26,7 @@ function ac(): AudioContext | null {
 
 export function setMuted(m: boolean) {
   muted = m;
-  localStorage.setItem("solsocket-escape:muted", m ? "1" : "0");
+  localStorage.setItem(MUTE_KEY, m ? "1" : "0");
   if (m) stopAmbient();
 }
 

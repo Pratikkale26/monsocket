@@ -98,13 +98,6 @@ player one" in mutable shared state, every write rewrites it with that client's
 copy and the roles ping-pong forever. The contract stamps a room's creator once,
 immutably, and every client reads the same answer.
 
-## Sibling
-
-[solsocket](https://github.com/Pratikkale26/solsocket) is the same API on Solana
-via MagicBlock ephemeral rollups — ~50ms and free in-game moves, with the
-outcome settling to L1. monsocket gives you permanent per-move history on the L1
-itself. Same mental model, different tradeoff.
-
 ## Status
 
 Monad testnet. Verified by a two-client suite against the live chain — presence
