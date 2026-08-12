@@ -1,0 +1,13 @@
+# The docs site is its own workspace root, deliberately.
+#
+# Without this, pnpm walks up, finds the repo's workspace, and installs all
+# three packages — which is how a docs deploy ends up pinned to the root's
+# pnpm version and building things it does not need. There is nothing to list
+# under `packages`: this project is one directory.
+packages: []
+
+# esbuild builds a native binary on install and vitepress will not bundle
+# without it. This allowance lives in the root workspace file too, which is
+# exactly what stops applying the moment docs stops being part of it.
+allowBuilds:
+  esbuild: true

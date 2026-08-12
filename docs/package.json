@@ -9,5 +9,7 @@
   },
   "devDependencies": {
     "vitepress": "^1.5.0"
-  }
+  },
+  "//": "Pinned to a pnpm Vercel ships natively. The repo root asks for 11.x, which Vercel will not use without opting into corepack — and this project has no reason to need it.",
+  "packageManager": "pnpm@9.15.9"
 }
