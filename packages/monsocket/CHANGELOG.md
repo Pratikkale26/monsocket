@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — unreleased
+## 0.3.0 — 2026-08-12
 
 Rooms stop sharing one global namespace, and a room you discovered becomes a
 room you can open.

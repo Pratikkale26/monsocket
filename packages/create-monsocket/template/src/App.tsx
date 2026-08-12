@@ -31,6 +31,10 @@ const sock = MonSocket.connect({
   key,
   contract: MONSOCKET_TESTNET_CONTRACT,
   realtime: true,
+  // Room ids are one namespace shared by every app on this contract. Without
+  // an `app`, the room below would be the same room as every other project
+  // that ever ran this template.
+  app: "__APP_NAME__",
 });
 
 // Same room name → same room on every client. No join transaction exists, so

@@ -23,8 +23,19 @@ if (fs.existsSync(ignore)) fs.renameSync(ignore, path.join(dest, ".gitignore"));
 
 const pkgPath = path.join(dest, "package.json");
 const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-pkg.name = path.basename(dest).toLowerCase().replace(/[^a-z0-9-]/g, "-");
+const appName = path.basename(dest).toLowerCase().replace(/[^a-z0-9-]/g, "-");
+pkg.name = appName;
 fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+// Room ids are one namespace shared by every app on the testnet contract, so
+// a template that shipped a fixed app string would put every scaffolded
+// project back in the same rooms it is meant to keep them out of. The name
+// they chose is already unique enough to be theirs.
+const appPath = path.join(dest, "src", "App.tsx");
+fs.writeFileSync(
+  appPath,
+  fs.readFileSync(appPath, "utf8").replace("__APP_NAME__", appName),
+);
 
 console.log(`
   Created ${target}
