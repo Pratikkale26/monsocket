@@ -479,6 +479,128 @@
   font-size: 11px;
 }
 
+/* ── the occupied machine ──
+   In a real arcade you never need a coin to watch — you stand at the
+   shoulder of whoever is playing. So occupancy is a state of the cabinet
+   itself rather than a list of sessions somewhere else on the page. */
+
+.cab-actions {
+  display: flex;
+  width: calc(100% + 24px);
+  margin: 0 -12px;
+  border-top: 1px solid var(--line-strong);
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+}
+
+.cab-actions .cab-coin {
+  width: auto;
+  flex: 1;
+  margin: 0;
+  border-top: none;
+  border-radius: 0;
+}
+
+.cab-actions .cab-coin + .cab-coin {
+  border-left: 1px solid var(--line-strong);
+}
+
+/* Watching is the cool, free path — never gold, which is the coin's colour. */
+.cab-watch {
+  color: #9fb8a6;
+  background: linear-gradient(180deg, #16211a, #101a13);
+}
+
+.cab-watch:hover {
+  background: linear-gradient(180deg, #1e2c23, #14201a);
+  color: #cfe0d3;
+}
+
+/* An empty wallet turns the coin slot into the dead end and watching into
+   the way in, so the two swap weight rather than sitting in a fixed order. */
+.cab-coin.quiet {
+  color: #7d8c81;
+  background: #0e1712;
+  flex: 0 1 auto;
+}
+
+.cab-watch.leads {
+  color: var(--gold-bright);
+  background: linear-gradient(180deg, #253320, #17231b);
+  flex: 1.6;
+}
+
+.cab-watch.leads:hover {
+  background: linear-gradient(180deg, #2e3f28, #1c2a20);
+}
+
+.cab-inplay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 5px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: hsl(var(--cab-hue) 45% 78%);
+}
+
+.cab-lamp {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--cab-hue) 90% 66%);
+  box-shadow: 0 0 8px hsl(var(--cab-hue) 90% 62% / 0.9);
+  animation: cab-breathe 2.6s ease-in-out infinite;
+}
+
+/* The one animation on the floor: a machine with someone at it. */
+@keyframes cab-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* An occupied cabinet stands a little further out of the dark. */
+.cab.occupied {
+  border-color: hsl(var(--cab-hue) 34% 34%);
+  box-shadow:
+    0 38px 70px -34px rgba(0, 0, 0, 0.95),
+    0 0 46px -14px hsl(var(--cab-hue) 70% 50% / 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.cx-inplay {
+  color: hsl(44 45% 72%);
+  font-style: normal;
+  margin-right: 10px;
+}
+
+.cx-inplay::after {
+  content: "·";
+  margin-left: 10px;
+  color: var(--muted);
+}
+
+/* The cabinet buttons are the only way through the floor by keyboard, and
+   the default outline vanishes against the dark. */
+.cab-coin:focus-visible {
+  outline: 2px solid hsl(var(--cab-hue) 70% 62%);
+  outline-offset: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cab-lamp {
+    animation: none;
+  }
+}
+
 /* ── boot / not found ── */
 
 .cx-boot {

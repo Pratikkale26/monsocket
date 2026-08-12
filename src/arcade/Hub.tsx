@@ -10,28 +10,62 @@ import { Suspense, useEffect, useState } from "react";
 import { CABINETS, type Cabinet } from "./games";
 import { useArcade } from "./ArcadeProvider";
 import { sock } from "./session";
+import { readLiveVaults, type LiveRoom } from "./live";
 
 const FAUCET = "https://faucet.monad.xyz";
 
+/** Under the ~40s window the sweep looks back over, so the floor never shows
+ *  a gap between one read and the next. */
+const LIVE_POLL_MS = 20_000;
+
+/** Walking up to a cabinet is a real navigation, not a client-side route.
+ *
+ *  A game reads its room out of the query string once, when its module first
+ *  loads. Pushing a new query at an already-loaded module leaves it holding
+ *  the old one: watch one room, come back, pick another, and you would arrive
+ *  in the first room again. The same staleness is why following a shared
+ *  ?room= link and then inserting a coin drops you back into that room instead
+ *  of a fresh one. A full load costs a moment and removes the whole class. */
+function enterCabinet(to: string) {
+  location.assign(to);
+}
+
 export default function Hub({ go }: { go: (path: string) => void }) {
   const { credits, mon, funded, address, name, setName, refresh } = useArcade();
-  const [live, setLive] = useState<number | null>(null);
+  const [opened, setOpened] = useState<number | null>(null);
+  const [inPlay, setInPlay] = useState<LiveRoom[]>([]);
   const [copied, setCopied] = useState(false);
 
-  // How busy is the floor? Room count comes straight off the contract's
+  // How many rooms have ever been opened here. Straight off the contract's
   // registry — no server, and it costs nothing to ask.
   useEffect(() => {
     let alive = true;
     const read = async () => {
       try {
         const ids = await sock.listRoomIds(24);
-        if (alive) setLive(ids.length);
+        if (alive) setOpened(ids.length);
       } catch {
         /* leave it unknown rather than claim zero */
       }
     };
     void read();
     const t = setInterval(read, 30_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  // Who is playing right now — a different question, and the one that decides
+  // whether a visitor alone has anything to do here.
+  useEffect(() => {
+    let alive = true;
+    const read = async () => {
+      const vaults = await readLiveVaults();
+      if (alive) setInPlay(vaults);
+    };
+    void read();
+    const t = setInterval(read, LIVE_POLL_MS);
     return () => {
       alive = false;
       clearInterval(t);
@@ -113,13 +147,25 @@ export default function Hub({ go }: { go: (path: string) => void }) {
         <div className="cx-floor-head">
           <span>the floor</span>
           <span className="cx-live">
-            {live === null ? "counting rooms…" : `${live} rooms opened here`}
+            {inPlay.length > 0 && (
+              <em className="cx-inplay">
+                {inPlay.length === 1 ? "1 game in play" : `${inPlay.length} games in play`}
+              </em>
+            )}
+            {opened === null ? "counting rooms…" : `${opened} rooms opened here`}
           </span>
         </div>
 
         <div className="cx-cabs">
           {CABINETS.map((cab) => (
-            <CabinetCard key={cab.id} cab={cab} go={go} />
+            <CabinetCard
+              key={cab.id}
+              cab={cab}
+              // Only The Vault has rooms to watch today. When a second cabinet
+              // lands this becomes a lookup, not a special case.
+              live={cab.id === "vault" ? inPlay : []}
+              funded={funded}
+            />
           ))}
         </div>
       </main>
@@ -137,17 +183,44 @@ export default function Hub({ go }: { go: (path: string) => void }) {
   );
 }
 
-function CabinetCard({ cab, go }: { cab: Cabinet; go: (p: string) => void }) {
+function CabinetCard({
+  cab,
+  live,
+  funded,
+}: {
+  cab: Cabinet;
+  live: LiveRoom[];
+  funded: boolean;
+}) {
   const playable = cab.status === "live";
   const Preview = cab.Preview;
 
+  // The busiest room, because a visitor watching over a shoulder wants the
+  // machine with people at it, not an arbitrary one.
+  const busiest = live[0] ?? null;
+  // Deliberately this room's count and not the total across every live room:
+  // it is the number the Watch button is about to deliver. The floor head
+  // above says how many games are running; this says who you are going to see.
+  const heads = busiest?.players ?? 0;
+
+  // Whoever cannot play should be looking at the door that opens. An empty
+  // wallet makes Insert coin the dead end and watching the way in, so they
+  // swap weight rather than sitting in a fixed order.
+  const watchLeads = busiest !== null && !funded;
+
   return (
     <article
-      className={`cab${playable ? "" : " dark"}`}
+      className={`cab${playable ? "" : " dark"}${busiest ? " occupied" : ""}`}
       style={{ ["--cab-hue" as string]: String(cab.hue) }}
     >
       <div className="cab-marquee">
         <h2>{cab.name}</h2>
+        {busiest && (
+          <p className="cab-inplay">
+            <span className="cab-lamp" aria-hidden="true" />
+            in play · {heads} {heads === 1 ? "player" : "players"}
+          </p>
+        )}
       </div>
 
       <div className="cab-screen">
@@ -171,13 +244,26 @@ function CabinetCard({ cab, go }: { cab: Cabinet; go: (p: string) => void }) {
         <p className="cab-tag">{cab.tagline}</p>
       </div>
 
-      {playable ? (
-        <button className="cab-coin" onClick={() => go(`/${cab.id}`)}>
-          <span className="cab-slot" aria-hidden="true" />
-          Insert coin
-        </button>
-      ) : (
+      {!playable ? (
         <div className="cab-coin off">Out of order</div>
+      ) : (
+        <div className="cab-actions">
+          <button
+            className={`cab-coin${watchLeads ? " quiet" : ""}`}
+            onClick={() => enterCabinet(`/${cab.id}`)}
+          >
+            <span className="cab-slot" aria-hidden="true" />
+            Insert coin
+          </button>
+          {busiest && (
+            <button
+              className={`cab-coin cab-watch${watchLeads ? " leads" : ""}`}
+              onClick={() => enterCabinet(`/${cab.id}?watch=${busiest.id}`)}
+            >
+              Watch — free
+            </button>
+          )}
+        </div>
       )}
     </article>
   );

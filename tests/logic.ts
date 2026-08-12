@@ -21,6 +21,8 @@ import {
   type Held,
   type Level,
 } from "../src/games/vault/vault.ts";
+import { groupRooms } from "../src/arcade/rooms.ts";
+import type { Hex } from "viem";
 
 let pass = 0;
 let fail = 0;
@@ -258,6 +260,60 @@ ok(solvedKeys(st(1, now, now + 1_500)), "level 2: 1.5s apart passes");
 ok(!solvedKeys(st(2, now, now + 1_300)), "level 3: 1.3s apart fails the 1.2s window");
 ok(solvedKeys(st(2, now + 500, now)), "order doesn't matter");
 ok(near(0, 0, TILE, 0, 1.5), "near() sanity");
+
+// ── the floor: reading occupancy out of a window of logs ──
+//
+// Wrong here means the floor looks empty while people are playing, or offers a
+// visitor a room nobody is in. Neither failure announces itself.
+{
+  const A = ("0x" + "aa".repeat(32)) as Hex;
+  const B = ("0x" + "bb".repeat(32)) as Hex;
+  const THEIRS = ("0x" + "cc".repeat(32)) as Hex;
+  const EVT = ("0x" + "11".repeat(32)) as Hex;
+  const p1 = ("0x" + "01".repeat(32)) as Hex;
+  const p2 = ("0x" + "02".repeat(32)) as Hex;
+  const mine = (id: Hex) => id !== THEIRS;
+  const log = (room: Hex, sender: Hex, block: number) => ({
+    topics: [EVT, room, sender] as Hex[],
+    blockNumber: `0x${block.toString(16)}` as Hex,
+  });
+
+  const grouped = groupRooms(
+    [
+      log(A, p1, 10),
+      log(A, p2, 11),
+      log(A, p1, 12), // same player again — one head, not two
+      log(B, p1, 13),
+      log(THEIRS, p1, 14),
+    ],
+    mine,
+  );
+
+  ok(grouped.length === 2, "another app's room is not on our floor");
+  ok(grouped[0].id === A, "the busiest room comes first");
+  ok(grouped[0].events === 3, "every event in the room is counted");
+  ok(grouped[0].players === 2, "the same player writing twice is still one player");
+  ok(grouped[0].lastBlock === 12n, "the room reports its most recent block");
+  ok(grouped[1].id === B && grouped[1].players === 1, "a quieter room still shows up");
+
+  // Presence with no sender topic should not invent a player, and a log with
+  // no room topic belongs to nobody.
+  const odd = groupRooms(
+    [{ topics: [EVT] as Hex[], blockNumber: "0xa" as Hex }, log(A, p1, 10)],
+    mine,
+  );
+  ok(odd.length === 1 && odd[0].id === A, "a log with no room topic is skipped");
+
+  ok(groupRooms([], mine).length === 0, "an empty window is a quiet floor, not an error");
+  ok(
+    groupRooms([log(A, p1, 10)], () => false).length === 0,
+    "a client that recognises nothing shows nothing",
+  );
+
+  // Ties on event count fall back to recency, so the freshest game wins.
+  const tied = groupRooms([log(A, p1, 10), log(B, p1, 99)], mine);
+  ok(tied[0].id === B, "equally busy rooms are ordered by most recent activity");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
