@@ -18,6 +18,7 @@ import { numberToHex } from "viem";
 import { sock } from "./session";
 import { CONTRACT } from "../lib/deployment";
 import { groupRooms, type LiveRoom, type RoomLog } from "./rooms";
+import { ARENA } from "../games/bloom/bloom";
 
 export type { LiveRoom } from "./rooms";
 
@@ -66,23 +67,43 @@ export async function readActiveRooms(): Promise<LiveRoom[]> {
  *  the first handful the extra reads buy nothing. */
 const VALIDATE_LIMIT = 4;
 
-/**
- * Vaults being played right now, busiest first.
- *
- * The app tag says a room claims to be ours; it does not say the room holds a
- * vault. The namespace stays open — anyone can build ids under any app string
- * — and the arcade's own cabinets will not all be vaults forever. So the
- * shortlist is confirmed by reading each candidate's shared state, batched
- * into one request, and only for the few that survived the tag.
- */
-export async function readLiveVaults(): Promise<LiveRoom[]> {
-  const active = await readActiveRooms();
-  if (active.length === 0) return [];
+/** What is being played on the floor right now, per cabinet. */
+export interface Floor {
+  /** Vaults in progress, busiest first. */
+  vault: LiveRoom[];
+  /** The public BLOOM arena, if anyone is in it. */
+  bloom: LiveRoom | null;
+}
 
-  const shortlist = active.slice(0, VALIDATE_LIMIT);
+/**
+ * One sweep, one answer for the whole floor.
+ *
+ * The two cabinets are identified in completely different ways, and both are
+ * cheap. A vault writes shared state, so a candidate can be confirmed by
+ * reading it. BLOOM never writes state at all — its rooms cost nothing to
+ * exist — so instead it is recognised the only way an id-only world allows:
+ * the public arena's id is known in advance, because its name is.
+ *
+ * The arena comes out of the vault shortlist BEFORE it is trimmed. A busy
+ * BLOOM round produces far more logs than a vault does, and left in the
+ * running it would push real vaults out of the handful of rooms that get
+ * their state checked — the floor would go quiet exactly when it was busiest.
+ */
+export async function readFloor(): Promise<Floor> {
+  const active = await readActiveRooms();
+  if (active.length === 0) return { vault: [], bloom: null };
+
+  const arenaId = sock.roomId(ARENA).toLowerCase();
+  const bloom = active.find((r) => r.id.toLowerCase() === arenaId) ?? null;
+
+  const shortlist = active
+    .filter((r) => r.id.toLowerCase() !== arenaId)
+    .slice(0, VALIDATE_LIMIT);
+  if (shortlist.length === 0) return { vault: [], bloom };
+
   const { isVaultState } = await import("../games/vault/vault");
   const states = await Promise.all(
     shortlist.map((r) => sock.peekState<unknown>(r.id).catch(() => null)),
   );
-  return shortlist.filter((_, i) => isVaultState(states[i]));
+  return { vault: shortlist.filter((_, i) => isVaultState(states[i])), bloom };
 }

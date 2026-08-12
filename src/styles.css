@@ -51,7 +51,10 @@ body {
 
 /* ── header ── */
 
-header h1 {
+/* Scoped to the vault's own header. An unscoped `header h1` reaches into
+   every other cabinet on the floor too, and cabinet 02 arrived wearing this
+   one's favicon in front of its wordmark. */
+.app header h1 {
   font-family: var(--font-display);
   font-weight: 400;
   font-size: 15px;
@@ -60,7 +63,7 @@ header h1 {
   color: var(--text);
 }
 
-header h1::before {
+.app header h1::before {
   content: "";
   display: inline-block;
   width: 20px;

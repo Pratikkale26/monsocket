@@ -10,7 +10,7 @@ import { Suspense, useEffect, useState } from "react";
 import { CABINETS, type Cabinet } from "./games";
 import { useArcade } from "./ArcadeProvider";
 import { sock } from "./session";
-import { readLiveVaults, type LiveRoom } from "./live";
+import { readFloor, type Floor, type LiveRoom } from "./live";
 
 const FAUCET = "https://faucet.monad.xyz";
 
@@ -33,7 +33,7 @@ function enterCabinet(to: string) {
 export default function Hub({ go }: { go: (path: string) => void }) {
   const { credits, mon, funded, address, name, setName, refresh } = useArcade();
   const [opened, setOpened] = useState<number | null>(null);
-  const [inPlay, setInPlay] = useState<LiveRoom[]>([]);
+  const [floor, setFloor] = useState<Floor>({ vault: [], bloom: null });
   const [copied, setCopied] = useState(false);
 
   // How many rooms have ever been opened here. Straight off the contract's
@@ -61,8 +61,8 @@ export default function Hub({ go }: { go: (path: string) => void }) {
   useEffect(() => {
     let alive = true;
     const read = async () => {
-      const vaults = await readLiveVaults();
-      if (alive) setInPlay(vaults);
+      const next = await readFloor();
+      if (alive) setFloor(next);
     };
     void read();
     const t = setInterval(read, LIVE_POLL_MS);
@@ -71,6 +71,11 @@ export default function Hub({ go }: { go: (path: string) => void }) {
       clearInterval(t);
     };
   }, []);
+
+  // Every cabinet's live rooms, keyed the way the floor renders them.
+  const liveFor = (id: string): LiveRoom[] =>
+    id === "vault" ? floor.vault : id === "bloom" && floor.bloom ? [floor.bloom] : [];
+  const running = floor.vault.length + (floor.bloom ? 1 : 0);
 
   return (
     <div className="cx">
@@ -147,9 +152,9 @@ export default function Hub({ go }: { go: (path: string) => void }) {
         <div className="cx-floor-head">
           <span>the floor</span>
           <span className="cx-live">
-            {inPlay.length > 0 && (
+            {running > 0 && (
               <em className="cx-inplay">
-                {inPlay.length === 1 ? "1 game in play" : `${inPlay.length} games in play`}
+                {running === 1 ? "1 game in play" : `${running} games in play`}
               </em>
             )}
             {opened === null ? "counting rooms…" : `${opened} rooms opened here`}
@@ -161,9 +166,7 @@ export default function Hub({ go }: { go: (path: string) => void }) {
             <CabinetCard
               key={cab.id}
               cab={cab}
-              // Only The Vault has rooms to watch today. When a second cabinet
-              // lands this becomes a lookup, not a special case.
-              live={cab.id === "vault" ? inPlay : []}
+              live={liveFor(cab.id)}
               funded={funded}
             />
           ))}

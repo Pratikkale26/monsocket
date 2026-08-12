@@ -136,3 +136,38 @@ export const sfx = {
     );
   },
 };
+
+/** BLOOM's cabinet. Same synth, same mute switch — the arcade has one volume
+ *  knob and a cabinet does not get its own. */
+export const bloomSfx = {
+  /** a claim leaves your machine — quiet, because you make a lot of them */
+  send: () => tone(520, 40, { type: "square", gain: 0.018 }),
+  /** it came back off the chain and the tile is yours */
+  land: () => tone(740, 70, { type: "triangle", gain: 0.03, sweepTo: 980 }),
+  /** you took a tile off somebody */
+  steal: () => {
+    tone(300, 70, { type: "square", gain: 0.035 });
+    tone(620, 90, { type: "triangle", gain: 0.03, delayMs: 60 });
+  },
+  /** a spore bursts */
+  burst: () => {
+    [660, 880, 1170].forEach((f, i) =>
+      tone(f, 150, { type: "triangle", gain: 0.045, delayMs: i * 70 }),
+    );
+  },
+  /** the chain refused the move */
+  deny: () => tone(180, 130, { type: "sawtooth", sweepTo: 110, gain: 0.03 }),
+  /** blight took ground */
+  rot: () => tone(90, 220, { type: "sine", sweepTo: 55, gain: 0.05 }),
+  /** a new round is dealt */
+  round: () => {
+    [392, 523, 659].forEach((f, i) =>
+      tone(f, 180, { type: "triangle", gain: 0.045, delayMs: i * 90 }),
+    );
+  },
+  /** play closes */
+  over: () => {
+    [520, 390].forEach((f, i) => tone(f, 260, { type: "triangle", gain: 0.05, delayMs: i * 170 }));
+  },
+};
+
