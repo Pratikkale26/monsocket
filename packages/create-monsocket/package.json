@@ -1,6 +1,6 @@
 {
   "name": "create-monsocket",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scaffold a realtime onchain multiplayer app on Monad (monsocket)",
   "license": "MIT",
   "author": "Pratik Kale",

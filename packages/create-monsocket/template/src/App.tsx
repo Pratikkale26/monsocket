@@ -24,7 +24,14 @@ const key = (() => {
   return fresh;
 })();
 
-const sock = MonSocket.connect({ key, contract: MONSOCKET_TESTNET_CONTRACT });
+// `realtime` streams events off Monad's monadLogs subscription instead of
+// polling — roughly twice as fast, and it falls back to polling on its own if
+// the socket is refused or drops, so it cannot leave the room dark.
+const sock = MonSocket.connect({
+  key,
+  contract: MONSOCKET_TESTNET_CONTRACT,
+  realtime: true,
+});
 
 // Same room name → same room on every client. No join transaction exists, so
 // arriving here is free and so is watching.
