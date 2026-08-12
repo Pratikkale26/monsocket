@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — unreleased
+## 0.2.0 — 2026-08-12
 
 The read path stopped polling, and the write path stopped failing quietly.
 
