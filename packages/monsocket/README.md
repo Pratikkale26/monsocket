@@ -14,6 +14,7 @@ import { MonSocket, MONSOCKET_TESTNET_CONTRACT } from "monsocket";
 const sock = MonSocket.connect({
   key: burnerKey,
   contract: MONSOCKET_TESTNET_CONTRACT,
+  app: "my-game",                                                // your own room namespace
   realtime: true,                                                // stream, don't poll
 });
 const room = await sock.joinOrCreate("lobby", { initialState: { door: false } });
@@ -35,6 +36,27 @@ already know this API — you just never got to use it onchain.
 ```bash
 npm create monsocket my-app
 ```
+
+## Two apps, two rooms called "lobby"
+
+A room id is `keccak256(name)`, one namespace shared by every app on the
+contract — so without `app`, your `"lobby"` is a stranger's `"lobby"`. Pass one
+and ids carry an 8-byte tag derived from it.
+
+The tag stays **readable** on purpose. Hashing app and name into one opaque
+digest would close the collision and stop there: discovery only ever returns
+ids, so you still could not tell which of the rooms you just found were yours
+without reading every one's state. A readable tag makes that a prefix check.
+
+```ts
+const mine = (await sock.listRoomIds(50)).filter((id) => sock.ownsRoom(id));
+const room = sock.watchRoom(mine[0]);   // ids are keccak — there is no name to recover
+room.onPresence(draw);                  // free: reading a room costs nothing
+```
+
+Opt-in, because it moves your rooms: adding `app` to a live app orphans every
+room it already has. A tag is a claim rather than a permission — the namespace
+stays open, so validate a room's state before trusting what you found.
 
 ## Why there is no join transaction
 
@@ -77,6 +99,9 @@ a room is free** — anyone can watch any room live with an empty wallet.
 | `onError(err)` | Durable writes are receipt-checked in the background; a revert arrives here instead of vanishing. |
 | `sock.measureGas(action, args)` | Estimate a real limit against the payload you actually send. |
 | `sock.joinOrCreate(name, { initialState?, readOnly? })` | Join a room by name; seeds state if the room is new. No transaction to join. |
+| `app: "my-game"` | Namespace your room ids. Without it every app on the contract shares one namespace. |
+| `sock.ownsRoom(roomId)` | Is this discovered room yours? A prefix check — no network call. |
+| `sock.watchRoom(roomId)` | A read-only room for an id you have no name for. |
 | `sock.peekState(roomId)` | Read any room's state without joining. Free. |
 | `sock.listRoomIds(limit?)` | The lobby index — rooms that exist, newest first. |
 | `sock.creatorOf(roomId)` | The room's immutable onchain referee: the first address that wrote its state. |

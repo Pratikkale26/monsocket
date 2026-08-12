@@ -41,9 +41,11 @@ import { MonSocket, MONSOCKET_TESTNET_CONTRACT, smoothPresence } from "monsocket
 const sock = MonSocket.connect({
   key: burnerKey,                        // a throwaway private key — signs every action
   contract: MONSOCKET_TESTNET_CONTRACT,  // or your own deployment
+  app: "my-game",                        // your own room namespace — see below
+  realtime: true,                        // stream events instead of polling
 });
 
-// same name → same room, on every client
+// same name → same room, on every client running your app
 const room = await sock.joinOrCreate("lobby", {
   initialState: { door: false },
 });
@@ -63,6 +65,20 @@ Smooth 60fps movement from onchain broadcasts:
 smoothPresence(room, (players) => render(players));
 ```
 
+## Name your app
+
+`app` matters more than it looks on the shared testnet contract. Without it a
+room id is just `keccak256(name)`, so your `"lobby"` is the same room as every
+other reader of this page who also called theirs `"lobby"`. Pass an app string
+and your rooms are yours.
+
+It also makes discovery work: `sock.ownsRoom(id)` picks your rooms out of
+`listRoomIds`, since the app tag stays readable inside the id. See
+[Concepts](/guide/concepts) for the whole story, including why the tag is not
+hashed away.
+
+Pick it before you have players — changing it later moves every room you have.
+
 ## Deploy your own contract
 
 ```bash
@@ -72,10 +88,20 @@ PRIVATE_KEY=0x... pnpm deploy      # records the address in deployment.ts
 
 ## Tests
 
-A 146-check BFS prover over the demo's puzzle graphs, and a 20-check
-two-client protocol suite that runs against **live Monad testnet**:
+```bash
+pnpm test
+```
+
+Two suites, neither needing a network: a BFS prover over the demo's puzzle
+graphs plus the room-discovery grouping (156 checks), and a transport suite
+behind a fake socket and a local JSON-RPC server covering reconnects,
+duplicate delivery, commit-state gating, backoff, namespacing and multi-tab
+nonce allocation (58 checks).
+
+A third suite runs two clients against **live Monad testnet**. It funds fresh
+burners from `scripts/deployer-key.json`, so it spends real testnet MON and is
+not part of `pnpm test`:
 
 ```bash
-node --experimental-strip-types tests/logic.ts
 node --experimental-strip-types tests/protocol.ts
 ```

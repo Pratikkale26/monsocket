@@ -35,8 +35,11 @@ partner sees, and two keys that must turn within a shrinking window.
 
 ## Proven, not promised
 
-- 146-check BFS reachability prover: every puzzle element is reachable
-  exactly when its prerequisites hold, never via a lethal tile.
-- 20-check two-client protocol suite against live testnet: presence both
-  ways, state races converging, free spectating from a 0 MON wallet, the
-  stake round-trip, and the lobby index.
+- A BFS reachability prover: every puzzle element is reachable exactly when
+  its prerequisites hold, never via a lethal tile.
+- 58 transport checks behind a fake socket and a local JSON-RPC server —
+  reconnects, duplicate delivery, commit-state gating, RPC backoff, room
+  namespacing, multi-tab nonce allocation.
+- A two-client protocol suite against live testnet: presence both ways,
+  state races converging, free spectating from a 0 MON wallet, the stake
+  round-trip, and the lobby index.

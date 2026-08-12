@@ -23,6 +23,53 @@ Rooms are open topics: any address can publish into any room id.
 Membership, roles, and game rules are the app's job (or a future
 program-side validation layer) — monsocket is deliberately game-agnostic.
 
+## Two rooms called "lobby"
+
+A room id is `keccak256(name)` by default, which means the name space is
+global. Every app deployed against the same contract shares it, so your
+`"lobby"` and a stranger's `"lobby"` are one room — and a lobby screen reading
+`listRoomIds` gets everybody's rooms mixed together with no way to tell them
+apart.
+
+Passing an `app` to `connect` namespaces your ids, and deliberately leaves the
+app recognisable inside them rather than hashing it away:
+
+```ts
+const sock = MonSocket.connect({ key, contract, app: "my-game" })
+
+sock.roomId("lobby")   // 8-byte tag from the app, then 24 bytes of room hash
+sock.ownsRoom(id)      // is this one of mine? a prefix check, no request
+```
+
+Hashing the app and name together into one digest would close the collision
+but stop there. Discovery only ever returns ids, so with an opaque digest you
+still could not look at a room and say whose it is without reading its state
+to find out. A readable tag turns that into a string comparison.
+
+The tag is a claim rather than a permission — the namespace stays open, and
+anyone can build ids under any app string. It narrows the field; validate the
+room's state before trusting what you find.
+
+Namespacing is opt-in because it moves your rooms: adding `app` to a live
+application orphans every room it already has, and every link shared into one.
+
+## Watching a room you cannot name
+
+Because ids are keccak hashes and the chain never publishes names, a room you
+discovered through `listRoomIds` or through its own event logs is a room whose
+name is genuinely unrecoverable — and `joinOrCreate` wants a name.
+
+`watchRoom` takes the id instead:
+
+```ts
+const room = sock.watchRoom(id)
+room.onPresence(draw)
+```
+
+It is read-only, which is the honest shape for it: there is no name to write
+under, and a spectator has arrived at somebody else's game. Reading a room
+costs nothing, so watching needs no wallet and no funds.
+
 ## The transport: tuned for how Monad actually works
 
 - **Monad bills `gas_limit`, not `gas_used`** — padding is real money.

@@ -8,13 +8,16 @@ Everything lives in `packages/monsocket/src` (client, viem-based) and
 
 | method | description |
 |---|---|
-| `MonSocket.connect({ key, contract, rpc?, realtime?, gas?, onError?, confirm? })` | Create a client from a burner private key, contract address, and RPC URL. No network calls yet. See [realtime](#realtime-monadlogs) and [gas & errors](#gas-and-errors). |
+| `MonSocket.connect({ key, contract, rpc?, app?, realtime?, gas?, onError?, confirm? })` | Create a client from a burner private key, contract address, and RPC URL. No network calls yet. See [rooms & namespacing](#rooms-and-namespacing), [realtime](#realtime-monadlogs) and [gas & errors](#gas-and-errors). |
 | `sock.measureGas(action, args, { value?, headroom? })` | Estimate what an action costs **with your payload**. Required reading if your shared state is larger than a few dozen bytes. |
 | `sock.gas` | The limits in force, after overrides. |
 | `sock.address` | The burner's address — your player identity. |
 | `sock.balance()` | Burner balance in wei. |
-| `sock.roomId(name)` | `keccak256(name)` — same name → same room id on every client. |
+| `sock.roomId(name)` | The room id for a name — same name → same room on every client. `keccak256(name)`, or a namespaced id if the client has an `app`. |
+| `sock.app` | The app this client's rooms are namespaced to, or `null`. |
+| `sock.ownsRoom(roomId)` | Does this id belong to this client's app? A prefix check — no network call. Always `false` without an `app`. |
 | `sock.joinOrCreate<T,P,M>(name, { initialState?, readOnly? })` | Returns a `Room`. Joining is free (no transaction). `initialState` seeds a brand-new room; `readOnly` never writes (spectators). |
+| `sock.watchRoom<T,P,M>(roomId)` | A read-only `Room` for an id you have no name for — the only way into a room you discovered rather than named. |
 | `sock.peekState<T>(roomId)` | Read any room's shared state without joining — no tx, no membership. |
 | `sock.listRoomIds(limit?)` | The last `limit` rooms ever created, newest first, from the onchain index. |
 | `sock.creatorOf(roomId)` | The room's immutable referee — the first address that ever wrote its state (or `null`). |
@@ -38,6 +41,63 @@ Everything lives in `packages/monsocket/src` (client, viem-based) and
 
 All payloads are JSON-encoded. `Room<T, P, M>` types state, presence, and
 messages independently.
+
+## Rooms and namespacing
+
+By default a room id is `keccak256(name)`, and that is one namespace shared by
+every app on the contract. Your `"lobby"` and everybody else's are the same
+room. Pass an `app` and ids are namespaced instead:
+
+```ts
+MonSocket.connect({ key, contract, app: "my-game" })
+```
+
+| | `roomId("lobby")` |
+|---|---|
+| no `app` | `keccak256("lobby")` |
+| `app: "my-game"` | 8-byte tag from `keccak256("my-game")`, then 24 bytes of room hash |
+
+It is opt-in because it moves your rooms. Adding `app` to a live application
+orphans every room it already has, along with any links people have shared
+into them.
+
+### Why the tag is readable
+
+The obvious design is `keccak(app + name)`, and it is not enough. Discovery
+only ever hands back ids — `listRoomIds` returns them, and so does every event
+log. With an opaque digest you can tell that two apps no longer collide, but
+you still cannot look at a room you just found and say whether it is yours;
+you would have to read each one's state to find out.
+
+So the app tag stays recoverable, and `ownsRoom` is a prefix comparison with
+no request behind it:
+
+```ts
+const mine = (await sock.listRoomIds(50)).filter((id) => sock.ownsRoom(id))
+```
+
+Two honest limits:
+
+- **This is not a server-side filter.** Log topics are exact matches and you
+  do not know the ids in advance, so every app's events still come down the
+  wire; you are sorting them locally, without extra round trips.
+- **A tag is a claim, not a permission.** The namespace stays open and anyone
+  can build ids under any app string. Treat `ownsRoom` as "worth looking at",
+  then validate the room's state before trusting it — as you would any input.
+
+### Entering a room you only have an id for
+
+`roomId()` is a keccak and the chain never publishes the name, so a room you
+discovered is a room you cannot name. `joinOrCreate` is useless to you there.
+`watchRoom` takes the id directly:
+
+```ts
+const room = sock.watchRoom(id)     // read-only: no name to write under
+room.onPresence(draw)               // free — reading a room costs nothing
+```
+
+It never writes, which is what a spectator wants: they arrived at somebody
+else's game.
 
 ## Realtime (`monadLogs`)
 
